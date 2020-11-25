@@ -4321,10 +4321,10 @@ domhandler@^2.3.0:
   dependencies:
     domelementtype "1"
 
-dompurify@2.0.8:
-  version "2.0.8"
-  resolved "https://repox.jfrog.io/repox/api/npm/npm/dompurify/-/dompurify-2.0.8.tgz#6ef89d2d227d041af139c7b01d9f67ed59c2eb3c"
-  integrity sha1-bvidLSJ9BBrxOcewHZ9n7VnC6zw=
+dompurify@2.2.0:
+  version "2.2.0"
+  resolved "https://repox.jfrog.io/repox/api/npm/npm/dompurify/-/dompurify-2.2.0.tgz#51d34e76faa38b5d6b4e83a0678530f27fe3965c"
+  integrity sha1-UdNOdvqji11rToOgZ4Uw8n/jllw=
 
 domutils@1.5.1:
   version "1.5.1"
@@ -4636,10 +4636,10 @@ escodegen@^1.11.1:
   optionalDependencies:
     source-map "~0.6.1"
 
-eslint-config-sonarqube@0.6.0:
-  version "0.6.0"
-  resolved "https://repox.jfrog.io/repox/api/npm/npm/eslint-config-sonarqube/-/eslint-config-sonarqube-0.6.0.tgz#4b507412160876adbd91c26906a3f31fa6f20519"
-  integrity sha1-S1B0EhYIdq29kcJpBqPzH6byBRk=
+eslint-config-sonarqube@0.6.1:
+  version "0.6.1"
+  resolved "https://repox.jfrog.io/repox/api/npm/npm/eslint-config-sonarqube/-/eslint-config-sonarqube-0.6.1.tgz#6779dfd643341e9688c4181800403bd26544d584"
+  integrity sha1-Z3nf1kM0HpaIxBgYAEA70mVE1YQ=
 
 eslint-import-resolver-node@^0.3.2:
   version "0.3.2"
@@ -7518,7 +7518,12 @@ lodash.uniq@^4.5.0:
   resolved "https://repox.jfrog.io/repox/api/npm/npm/lodash.uniq/-/lodash.uniq-4.5.0.tgz#d0225373aeb652adc1bc82e4945339a842754773"
   integrity sha1-0CJTc662Uq3BvILklFM5qEJ1R3M=
 
-lodash@4.17.15, lodash@^4.15.0, lodash@^4.17.10, lodash@^4.17.11, lodash@^4.17.13, lodash@^4.17.14, lodash@^4.17.15, lodash@^4.17.3, lodash@^4.17.4, lodash@^4.17.5, lodash@^4.3.0:
+lodash@4.17.20:
+  version "4.17.20"
+  resolved "https://repox.jfrog.io/repox/api/npm/npm/lodash/-/lodash-4.17.20.tgz#b44a9b6297bcb698f1c51a3545a2b3b368d59c52"
+  integrity sha1-tEqbYpe8tpjxxRo1RaKzs2jVnFI=
+
+lodash@^4.15.0, lodash@^4.17.10, lodash@^4.17.11, lodash@^4.17.13, lodash@^4.17.14, lodash@^4.17.15, lodash@^4.17.3, lodash@^4.17.4, lodash@^4.17.5, lodash@^4.3.0:
   version "4.17.15"
   resolved "https://repox.jfrog.io/repox/api/npm/npm/lodash/-/lodash-4.17.15.tgz#b447f6670a0455bbfeedd11392eff330ea097548"
   integrity sha1-tEf2ZwoEVbv+7dETku/zMOoJdUg=
@@ -10765,10 +10770,10 @@ sockjs@0.3.19:
     faye-websocket "^0.10.0"
     uuid "^3.0.1"
 
-sonar-ui-common@1.0.14:
-  version "1.0.14"
-  resolved "https://repox.jfrog.io/repox/api/npm/npm/sonar-ui-common/-/sonar-ui-common-1.0.14.tgz#a9e189404eb29051c47241dbc83729c03b8c1cad"
-  integrity sha1-qeGJQE6ykFHEckHbyDcpwDuMHK0=
+sonar-ui-common@1.0.25:
+  version "1.0.25"
+  resolved "https://repox.jfrog.io/repox/api/npm/npm/sonar-ui-common/-/sonar-ui-common-1.0.25.tgz#ceea783ad06ab5add0603cb704a207b0e499e63d"
+  integrity sha1-zup4OtBqta3QYDy3BKIHsOSZ5j0=
   dependencies:
     "@types/react-select" "1.2.6"
     classnames "2.2.6"

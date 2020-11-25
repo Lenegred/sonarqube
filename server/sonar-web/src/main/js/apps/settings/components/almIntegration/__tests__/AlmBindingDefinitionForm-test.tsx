@@ -25,7 +25,11 @@ import { GithubBindingDefinition } from '../../../../../types/alm-settings';
 import AlmBindingDefinitionForm from '../AlmBindingDefinitionForm';
 
 it('should render correctly', () => {
-  expect(shallowRender()).toMatchSnapshot();
+  expect(shallowRender()).toMatchSnapshot('create');
+
+  expect(shallowRender({ bindingDefinition: mockGithubBindingDefinition() })).toMatchSnapshot(
+    'edit'
+  );
 });
 
 it('should reset if the props change', () => {

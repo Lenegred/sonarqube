@@ -19,7 +19,6 @@
  */
 package org.sonar.server.usergroups.ws;
 
-import java.util.Optional;
 import org.sonar.api.server.ws.Change;
 import org.sonar.api.server.ws.Request;
 import org.sonar.api.server.ws.Response;
@@ -28,18 +27,18 @@ import org.sonar.api.server.ws.WebService.NewController;
 import org.sonar.api.user.UserGroupValidation;
 import org.sonar.db.DbClient;
 import org.sonar.db.DbSession;
-import org.sonar.db.organization.OrganizationDto;
 import org.sonar.db.user.GroupDto;
 import org.sonar.db.user.UserMembershipQuery;
+import org.sonar.server.exceptions.NotFoundException;
 import org.sonar.server.user.UserSession;
 import org.sonarqube.ws.UserGroups;
 
 import static java.lang.String.format;
+import static java.util.Optional.ofNullable;
 import static org.sonar.api.user.UserGroupValidation.GROUP_NAME_MAX_LENGTH;
 import static org.sonar.core.util.Uuids.UUID_EXAMPLE_01;
-import static org.sonar.db.permission.OrganizationPermission.ADMINISTER;
-import static org.sonar.server.exceptions.NotFoundException.checkFound;
-import static org.sonar.server.exceptions.NotFoundException.checkFoundWithOptional;
+import static org.sonar.db.permission.GlobalPermission.ADMINISTER;
+import static org.sonar.server.qualitygate.ws.QualityGatesWsParameters.PARAM_CURRENT_NAME;
 import static org.sonar.server.usergroups.ws.GroupWsSupport.DESCRIPTION_MAX_LENGTH;
 import static org.sonar.server.usergroups.ws.GroupWsSupport.PARAM_GROUP_DESCRIPTION;
 import static org.sonar.server.usergroups.ws.GroupWsSupport.PARAM_GROUP_ID;
@@ -69,13 +68,19 @@ public class UpdateAction implements UserGroupsWsAction {
       .setResponseExample(getClass().getResource("update.example.json"))
       .setSince("5.2")
       .setChangelog(
+        new Change("8.5", "Parameter 'id' deprecated in favor of 'currentName'"),
         new Change("8.4", "Parameter 'id' format changes from integer to string"),
         new Change("6.4", "The default group is no longer editable"));
 
     action.createParam(PARAM_GROUP_ID)
-      .setDescription("Identifier of the group.")
+      .setDescription("Identifier of the group. Use '" + PARAM_CURRENT_NAME + "' instead.")
       .setExampleValue(UUID_EXAMPLE_01)
-      .setRequired(true);
+      .setDeprecatedSince("8.5");
+
+    action.createParam(PARAM_CURRENT_NAME)
+      .setDescription("Name of the group to be updated. Mandatory unless '" + PARAM_GROUP_ID + "' is used.")
+      .setExampleValue(UUID_EXAMPLE_01)
+      .setSince("8.5");
 
     action.createParam(PARAM_GROUP_NAME)
       .setMaximumLength(GROUP_NAME_MAX_LENGTH)
@@ -93,12 +98,23 @@ public class UpdateAction implements UserGroupsWsAction {
   @Override
   public void handle(Request request, Response response) throws Exception {
     try (DbSession dbSession = dbClient.openSession(false)) {
-      String groupUuid = request.mandatoryParam(PARAM_GROUP_ID);
-      GroupDto group = dbClient.groupDao().selectByUuid(dbSession, groupUuid);
-      checkFound(group, "Could not find a user group with id '%s'.", groupUuid);
-      Optional<OrganizationDto> org = dbClient.organizationDao().selectByUuid(dbSession, group.getOrganizationUuid());
-      checkFoundWithOptional(org, "Could not find organization with id '%s'.", group.getOrganizationUuid());
-      userSession.checkPermission(ADMINISTER, org.get());
+      String groupUuid = request.param(PARAM_GROUP_ID);
+      String currentName = request.param(PARAM_CURRENT_NAME);
+
+      if ((groupUuid == null && currentName == null) || (groupUuid != null && currentName != null)) {
+        throw new IllegalArgumentException(format("Need to specify one and only one of '%s' or '%s'", PARAM_GROUP_ID, PARAM_CURRENT_NAME));
+      }
+
+      GroupDto group;
+      if (groupUuid != null) {
+        group = ofNullable(dbClient.groupDao().selectByUuid(dbSession, groupUuid))
+          .orElseThrow(() -> new NotFoundException(format("Could not find a user group with id '%s'.", groupUuid)));
+      } else {
+        group = dbClient.groupDao().selectByName(dbSession, currentName)
+          .orElseThrow(() -> new NotFoundException(format("Could not find a user group with name '%s'.", currentName)));
+      }
+
+      userSession.checkPermission(ADMINISTER);
       support.checkGroupIsNotDefault(dbSession, group);
 
       boolean changed = false;
@@ -106,7 +122,7 @@ public class UpdateAction implements UserGroupsWsAction {
       if (newName != null) {
         changed = true;
         UserGroupValidation.validateGroupName(newName);
-        support.checkNameDoesNotExist(dbSession, group.getOrganizationUuid(), newName);
+        support.checkNameDoesNotExist(dbSession, newName);
         group.setName(newName);
       }
 
@@ -121,21 +137,20 @@ public class UpdateAction implements UserGroupsWsAction {
         dbSession.commit();
       }
 
-      writeResponse(dbSession, request, response, org.get(), group);
+      writeResponse(dbSession, request, response, group);
     }
   }
 
-  private void writeResponse(DbSession dbSession, Request request, Response response, OrganizationDto organization, GroupDto group) {
+  private void writeResponse(DbSession dbSession, Request request, Response response, GroupDto group) {
     UserMembershipQuery query = UserMembershipQuery.builder()
       .groupUuid(group.getUuid())
-      .organizationUuid(organization.getUuid())
       .membership(UserMembershipQuery.IN)
       .build();
     int membersCount = dbClient.groupMembershipDao().countMembers(dbSession, query);
 
     UserGroups.UpdateWsResponse.Builder respBuilder = UserGroups.UpdateWsResponse.newBuilder();
     // 'default' is always false as it's not possible to update a default group
-    respBuilder.setGroup(toProtobuf(organization, group, membersCount, false));
+    respBuilder.setGroup(toProtobuf(group, membersCount, false));
     writeProtobuf(respBuilder.build(), request, response);
   }
 

@@ -19,59 +19,89 @@
  */
 import { shallow } from 'enzyme';
 import * as React from 'react';
-import { mockGithubBindingDefinition } from '../../../../../helpers/mocks/alm-settings';
-import { AlmKeys, GithubBindingDefinition } from '../../../../../types/alm-settings';
+import {
+  mockAzureBindingDefinition,
+  mockGithubBindingDefinition
+} from '../../../../../helpers/mocks/alm-settings';
+import {
+  AlmBindingDefinition,
+  AlmKeys,
+  AzureBindingDefinition
+} from '../../../../../types/alm-settings';
 import AlmTabRenderer, { AlmTabRendererProps } from '../AlmTabRenderer';
 
 it('should render correctly for multi-ALM binding', () => {
-  expect(shallowRender({ loadingAlmDefinitions: true })).toMatchSnapshot('loading ALM definitions');
-  expect(shallowRender({ loadingProjectCount: true })).toMatchSnapshot('loading project count');
-  expect(shallowRender({ submitting: true })).toMatchSnapshot('submitting');
-  expect(shallowRender()).toMatchSnapshot('loaded');
-  expect(shallowRender({ editedDefinition: mockGithubBindingDefinition() })).toMatchSnapshot(
+  expect(shallowRenderAzure({ loadingAlmDefinitions: true })).toMatchSnapshot(
+    'loading ALM definitions'
+  );
+  expect(shallowRenderAzure({ loadingProjectCount: true })).toMatchSnapshot(
+    'loading project count'
+  );
+  expect(shallowRenderAzure({ submitting: true })).toMatchSnapshot('submitting');
+  expect(shallowRenderAzure()).toMatchSnapshot('loaded');
+  expect(shallowRenderAzure({ editedDefinition: mockAzureBindingDefinition() })).toMatchSnapshot(
     'editing a definition'
   );
-  expect(
-    shallowRender({
-      features: [
-        {
-          active: true,
-          name: 'Foo',
-          description: 'Bar'
-        },
-        {
-          active: false,
-          name: 'Baz',
-          description: 'Bim'
-        }
-      ]
-    })
-  ).toMatchSnapshot('with features');
 });
 
 it('should render correctly for single-ALM binding', () => {
   expect(
-    shallowRender({ loadingAlmDefinitions: true, multipleAlmEnabled: false })
+    shallowRenderAzure({ loadingAlmDefinitions: true, multipleAlmEnabled: false })
   ).toMatchSnapshot();
-  expect(shallowRender({ multipleAlmEnabled: false })).toMatchSnapshot();
+  expect(shallowRenderAzure({ multipleAlmEnabled: false })).toMatchSnapshot();
   expect(
-    shallowRender({ definitions: [mockGithubBindingDefinition()], multipleAlmEnabled: false })
+    shallowRenderAzure({ definitions: [mockAzureBindingDefinition()], multipleAlmEnabled: false })
   ).toMatchSnapshot();
 });
 
-function shallowRender(props: Partial<AlmTabRendererProps<GithubBindingDefinition>> = {}) {
+it('should render correctly with validation', () => {
+  const githubProps = {
+    alm: AlmKeys.GitHub,
+    defaultBinding: mockGithubBindingDefinition(),
+    definitions: [mockGithubBindingDefinition()]
+  };
+  expect(shallowRender(githubProps)).toMatchSnapshot();
+  expect(shallowRender({ ...githubProps, definitions: [] })).toMatchSnapshot('empty');
+
+  expect(
+    shallowRender({
+      ...githubProps,
+      editedDefinition: mockGithubBindingDefinition()
+    })
+  ).toMatchSnapshot('create a second');
+
+  expect(
+    shallowRender({
+      ...githubProps,
+      definitions: [],
+      editedDefinition: mockGithubBindingDefinition()
+    })
+  ).toMatchSnapshot('create a first');
+});
+
+function shallowRenderAzure(props: Partial<AlmTabRendererProps<AzureBindingDefinition>> = {}) {
+  return shallowRender({
+    defaultBinding: mockAzureBindingDefinition(),
+    definitions: [mockAzureBindingDefinition()],
+    ...props
+  });
+}
+
+function shallowRender<B extends AlmBindingDefinition>(
+  props: Partial<AlmTabRendererProps<B>> = {}
+) {
   return shallow(
     <AlmTabRenderer
-      additionalColumnsHeaders={['url', 'app_id']}
-      additionalColumnsKeys={['url', 'appId']}
-      alm={AlmKeys.GitHub}
-      defaultBinding={mockGithubBindingDefinition()}
-      definitions={[mockGithubBindingDefinition()]}
+      alm={AlmKeys.Azure}
+      defaultBinding={{} as any}
+      definitions={[]}
+      definitionStatus={{}}
       form={jest.fn()}
       loadingAlmDefinitions={false}
       loadingProjectCount={false}
       multipleAlmEnabled={true}
       onCancel={jest.fn()}
+      onCheck={jest.fn()}
       onCreate={jest.fn()}
       onDelete={jest.fn()}
       onEdit={jest.fn()}

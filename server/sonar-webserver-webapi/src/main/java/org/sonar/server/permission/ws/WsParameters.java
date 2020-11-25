@@ -30,7 +30,6 @@ import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_D
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_GROUP_ID;
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_GROUP_NAME;
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_ID;
-import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_ORGANIZATION;
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_PERMISSION;
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_PROJECT_ID;
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_PROJECT_KEY;
@@ -48,8 +47,7 @@ public class WsParameters {
   public WsParameters(PermissionService permissionService) {
     this.permissionService = permissionService;
     String allProjectsPermissionsOnOneLine = Joiner.on(", ").join(permissionService.getAllProjectPermissions());
-    permissionParamDescription = String.format("Permission" +
-      "<ul>" +
+    permissionParamDescription = String.format("<ul>" +
       "<li>Possible values for global permissions: %s</li>" +
       "<li>Possible values for project permissions %s</li>" +
       "</ul>",
@@ -63,8 +61,12 @@ public class WsParameters {
   }
 
   public WebService.NewParam createPermissionParameter(WebService.NewAction action) {
+    return createPermissionParameter(action, "Permission.");
+  }
+
+  public WebService.NewParam createPermissionParameter(WebService.NewAction action, String descriptionHeader) {
     return action.createParam(PARAM_PERMISSION)
-      .setDescription(permissionParamDescription)
+      .setDescription(descriptionHeader + permissionParamDescription)
       .setRequired(true);
   }
 
@@ -83,13 +85,6 @@ public class WsParameters {
     action.createParam(PARAM_GROUP_NAME)
       .setDescription("Group name or 'anyone' (case insensitive)")
       .setExampleValue("sonar-administrators");
-  }
-
-  public static WebService.NewParam createOrganizationParameter(WebService.NewAction action) {
-    return action.createParam(PARAM_ORGANIZATION)
-      .setDescription("Key of organization, used when group name is set")
-      .setExampleValue("my-org")
-      .setInternal(true);
   }
 
   public static void createGroupIdParameter(WebService.NewAction action) {
@@ -123,7 +118,6 @@ public class WsParameters {
     action.createParam(PARAM_TEMPLATE_ID)
       .setDescription("Template id")
       .setExampleValue(UUID_EXAMPLE_01);
-    createOrganizationParameter(action);
     action.createParam(PARAM_TEMPLATE_NAME)
       .setDescription("Template name")
       .setExampleValue("Default Permission Template for Projects");

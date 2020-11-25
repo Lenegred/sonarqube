@@ -21,11 +21,19 @@ import * as React from 'react';
 import {
   countBindedProjects,
   deleteConfiguration,
-  getAlmDefinitions
+  getAlmDefinitions,
+  validateAlmSettings
 } from '../../../../api/alm-settings';
 import { withAppState } from '../../../../components/hoc/withAppState';
-import { AlmKeys, AlmSettingsBindingDefinitions } from '../../../../types/alm-settings';
+import {
+  AlmBindingDefinition,
+  AlmKeys,
+  AlmSettingsBindingDefinitions,
+  AlmSettingsBindingStatus,
+  AlmSettingsBindingStatusType
+} from '../../../../types/alm-settings';
 import AlmIntegrationRenderer from './AlmIntegrationRenderer';
+import { VALIDATED_ALMS } from './utils';
 
 interface Props {
   appState: Pick<T.AppState, 'branchesEnabled' | 'multipleAlmEnabled'>;
@@ -36,6 +44,7 @@ interface State {
   currentAlm: AlmKeys;
   definitionKeyForDeletion?: string;
   definitions: AlmSettingsBindingDefinitions;
+  definitionStatus: T.Dict<AlmSettingsBindingStatus>;
   loadingAlmDefinitions: boolean;
   loadingProjectCount: boolean;
   projectCount?: number;
@@ -51,13 +60,23 @@ export class AlmIntegration extends React.PureComponent<Props, State> {
       [AlmKeys.GitHub]: [],
       [AlmKeys.GitLab]: []
     },
+    definitionStatus: {},
     loadingAlmDefinitions: true,
     loadingProjectCount: false
   };
 
   componentDidMount() {
     this.mounted = true;
-    this.fetchPullRequestDecorationSetting();
+    return this.fetchPullRequestDecorationSetting().then(definitions => {
+      if (definitions) {
+        // Validate all alms on load:
+        VALIDATED_ALMS.forEach(alm => {
+          this.state.definitions[alm].forEach((def: AlmBindingDefinition) =>
+            this.handleCheck(def.key, false)
+          );
+        });
+      }
+    });
   }
 
   componentWillUnmount() {
@@ -91,7 +110,9 @@ export class AlmIntegration extends React.PureComponent<Props, State> {
             definitions,
             loadingAlmDefinitions: false
           });
+          return definitions;
         }
+        return undefined;
       })
       .catch(() => {
         if (this.mounted) {
@@ -127,6 +148,41 @@ export class AlmIntegration extends React.PureComponent<Props, State> {
       });
   };
 
+  handleCheck = async (definitionKey: string, alertSuccess = true) => {
+    this.setState(({ definitionStatus }) => {
+      definitionStatus[definitionKey] = {
+        ...definitionStatus[definitionKey],
+        type: AlmSettingsBindingStatusType.Validating
+      };
+
+      return { definitionStatus: { ...definitionStatus } };
+    });
+
+    let type: AlmSettingsBindingStatusType;
+    let failureMessage = '';
+
+    try {
+      failureMessage = await validateAlmSettings(definitionKey);
+      type = failureMessage
+        ? AlmSettingsBindingStatusType.Failure
+        : AlmSettingsBindingStatusType.Success;
+    } catch (_) {
+      type = AlmSettingsBindingStatusType.Warning;
+    }
+
+    if (this.mounted) {
+      this.setState(({ definitionStatus }) => {
+        definitionStatus[definitionKey] = {
+          alertSuccess,
+          failureMessage,
+          type
+        };
+
+        return { definitionStatus: { ...definitionStatus } };
+      });
+    }
+  };
+
   render() {
     const {
       appState: { branchesEnabled, multipleAlmEnabled },
@@ -139,6 +195,7 @@ export class AlmIntegration extends React.PureComponent<Props, State> {
         multipleAlmEnabled={Boolean(multipleAlmEnabled)}
         onCancel={this.handleCancel}
         onConfirmDelete={this.deleteConfiguration}
+        onCheck={this.handleCheck}
         onDelete={this.handleDelete}
         onSelectAlm={this.handleSelectAlm}
         onUpdateDefinitions={this.fetchPullRequestDecorationSetting}

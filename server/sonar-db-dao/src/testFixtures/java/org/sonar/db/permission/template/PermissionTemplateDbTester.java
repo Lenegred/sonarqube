@@ -23,10 +23,10 @@ import javax.annotation.Nullable;
 import org.sonar.db.DbClient;
 import org.sonar.db.DbSession;
 import org.sonar.db.DbTester;
-import org.sonar.db.organization.OrganizationDto;
 import org.sonar.db.user.GroupDto;
 import org.sonar.db.user.UserDto;
 
+import static java.util.Optional.ofNullable;
 import static org.sonar.db.permission.template.PermissionTemplateTesting.newPermissionTemplateCharacteristicDto;
 import static org.sonar.db.permission.template.PermissionTemplateTesting.newPermissionTemplateDto;
 
@@ -41,18 +41,31 @@ public class PermissionTemplateDbTester {
     this.dbSession = db.getSession();
   }
 
-  public PermissionTemplateDto insertTemplate() {
-    return insertTemplate(newPermissionTemplateDto());
+  public void setDefaultTemplates(String projectDefaultTemplateUuid, @Nullable String applicationDefaultTemplateUuid, @Nullable String portfoliosDefaultTemplateUuid) {
+    db.getDbClient().internalPropertiesDao().save(dbSession, "defaultTemplate.prj", projectDefaultTemplateUuid);
+    if (applicationDefaultTemplateUuid != null) {
+      db.getDbClient().internalPropertiesDao().save(dbSession, "defaultTemplate.app", applicationDefaultTemplateUuid);
+    }
+    if (portfoliosDefaultTemplateUuid != null) {
+      db.getDbClient().internalPropertiesDao().save(dbSession, "defaultTemplate.port", portfoliosDefaultTemplateUuid);
+    }
+    dbSession.commit();
   }
 
-  public PermissionTemplateDto insertTemplate(OrganizationDto organizationDto) {
-    return insertTemplate(newPermissionTemplateDto().setOrganizationUuid(organizationDto.getUuid()));
+  public void setDefaultTemplates(PermissionTemplateDto projectDefaultTemplate, @Nullable PermissionTemplateDto applicationDefaultTemplate,
+    @Nullable PermissionTemplateDto portfoliosDefaultTemplate) {
+    setDefaultTemplates(projectDefaultTemplate.getUuid(),
+      ofNullable(applicationDefaultTemplate).map(PermissionTemplateDto::getUuid).orElse(null),
+      ofNullable(portfoliosDefaultTemplate).map(PermissionTemplateDto::getUuid).orElse(null));
+  }
+
+  public PermissionTemplateDto insertTemplate() {
+    return insertTemplate(newPermissionTemplateDto());
   }
 
   public PermissionTemplateDto insertTemplate(PermissionTemplateDto template) {
     PermissionTemplateDto templateInDb = dbClient.permissionTemplateDao().insert(dbSession, template);
     db.commit();
-
     return templateInDb;
   }
 

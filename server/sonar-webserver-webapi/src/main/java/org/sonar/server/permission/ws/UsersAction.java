@@ -25,6 +25,7 @@ import com.google.common.collect.TreeMultimap;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import javax.annotation.Nullable;
 import org.sonar.api.server.ws.Change;
 import org.sonar.api.server.ws.Request;
 import org.sonar.api.server.ws.Response;
@@ -33,12 +34,11 @@ import org.sonar.api.server.ws.WebService.Param;
 import org.sonar.api.utils.Paging;
 import org.sonar.db.DbClient;
 import org.sonar.db.DbSession;
-import org.sonar.db.organization.OrganizationDto;
+import org.sonar.db.component.ComponentDto;
 import org.sonar.db.permission.PermissionQuery;
 import org.sonar.db.permission.UserPermissionDto;
 import org.sonar.db.user.UserDto;
 import org.sonar.server.issue.AvatarResolver;
-import org.sonar.server.permission.ProjectUuid;
 import org.sonar.server.permission.RequestValidator;
 import org.sonar.server.user.UserSession;
 import org.sonarqube.ws.Permissions;
@@ -52,10 +52,8 @@ import static org.sonar.db.permission.PermissionQuery.RESULTS_MAX_SIZE;
 import static org.sonar.db.permission.PermissionQuery.SEARCH_QUERY_MIN_LENGTH;
 import static org.sonar.server.permission.PermissionPrivilegeChecker.checkProjectAdmin;
 import static org.sonar.server.permission.RequestValidator.validateGlobalPermission;
-import static org.sonar.server.permission.ws.WsParameters.createOrganizationParameter;
 import static org.sonar.server.permission.ws.WsParameters.createProjectParameters;
 import static org.sonar.server.ws.WsUtils.writeProtobuf;
-import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_ORGANIZATION;
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_PERMISSION;
 
 public class UsersAction implements PermissionsWsAction {
@@ -101,7 +99,6 @@ public class UsersAction implements PermissionsWsAction {
       .setDescription("Limit search to user names that contain the supplied string. <br/>")
       .setExampleValue("eri");
 
-    createOrganizationParameter(action).setSince("6.2");
     wsParameters.createPermissionParameter(action).setRequired(false);
     createProjectParameters(action);
   }
@@ -109,32 +106,34 @@ public class UsersAction implements PermissionsWsAction {
   @Override
   public void handle(Request request, Response response) throws Exception {
     try (DbSession dbSession = dbClient.openSession(false)) {
-      OrganizationDto org = wsSupport.findOrganization(dbSession, request.param(PARAM_ORGANIZATION));
-      Optional<ProjectUuid> project = wsSupport.findProjectUuid(dbSession, request);
-      checkProjectAdmin(userSession, org.getUuid(), project);
+      Optional<ComponentDto> project = wsSupport.findProject(dbSession, request);
+      checkProjectAdmin(userSession, project.orElse(null));
 
-      PermissionQuery query = buildPermissionQuery(request, org, project);
+      PermissionQuery query = buildPermissionQuery(request, project.orElse(null));
       List<UserDto> users = findUsers(dbSession, query);
       int total = dbClient.userPermissionDao().countUsersByQuery(dbSession, query);
-      List<UserPermissionDto> userPermissions = findUserPermissions(dbSession, org, users, project);
+      List<UserPermissionDto> userPermissions = findUserPermissions(dbSession, users, project.orElse(null));
       Paging paging = Paging.forPageIndex(request.mandatoryParamAsInt(Param.PAGE)).withPageSize(query.getPageSize()).andTotal(total);
       UsersWsResponse usersWsResponse = buildResponse(users, userPermissions, paging);
       writeProtobuf(usersWsResponse, request, response);
     }
   }
 
-  private PermissionQuery buildPermissionQuery(Request request, OrganizationDto organization, Optional<ProjectUuid> project) {
+  private PermissionQuery buildPermissionQuery(Request request, @Nullable ComponentDto project) {
     String textQuery = request.param(Param.TEXT_QUERY);
     String permission = request.param(PARAM_PERMISSION);
     PermissionQuery.Builder permissionQuery = PermissionQuery.builder()
-      .setOrganizationUuid(organization.getUuid())
       .setPermission(permission)
       .setPageIndex(request.mandatoryParamAsInt(Param.PAGE))
       .setPageSize(request.mandatoryParamAsInt(Param.PAGE_SIZE))
       .setSearchQuery(textQuery);
-    project.ifPresent(projectId -> permissionQuery.setComponent(projectId.getUuid()));
+
+    if (project != null) {
+      permissionQuery.setComponent(project.uuid());
+    }
+
     if (permission != null) {
-      if (project.isPresent()) {
+      if (project != null) {
         requestValidator.validateProjectPermission(permission);
       } else {
         validateGlobalPermission(permission);
@@ -172,15 +171,16 @@ public class UsersAction implements PermissionsWsAction {
     return Ordering.explicit(orderedUuids).onResultOf(UserDto::getUuid).immutableSortedCopy(dbClient.userDao().selectByUuids(dbSession, orderedUuids));
   }
 
-  private List<UserPermissionDto> findUserPermissions(DbSession dbSession, OrganizationDto org, List<UserDto> users, Optional<ProjectUuid> project) {
+  private List<UserPermissionDto> findUserPermissions(DbSession dbSession, List<UserDto> users, @Nullable ComponentDto project) {
     if (users.isEmpty()) {
       return emptyList();
     }
     List<String> userUuids = users.stream().map(UserDto::getUuid).collect(Collectors.toList());
     PermissionQuery.Builder queryBuilder = PermissionQuery.builder()
-      .setOrganizationUuid(org.getUuid())
       .withAtLeastOnePermission();
-    project.ifPresent(p -> queryBuilder.setComponent(p.getUuid()));
+    if (project != null) {
+      queryBuilder.setComponent(project.uuid());
+    }
     return dbClient.userPermissionDao().selectUserPermissionsByQuery(dbSession, queryBuilder.build(), userUuids);
   }
 }

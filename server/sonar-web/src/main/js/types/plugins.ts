@@ -50,6 +50,7 @@ export interface PendingPlugin extends Plugin {
 
 export interface InstalledPlugin extends PendingPlugin {
   documentationPath?: string;
+  issueTrackerUrl?: string;
   filename: string;
   hash: string;
   sonarLintSupported: boolean;
@@ -69,6 +70,11 @@ export interface Update {
   release?: Release;
   requires: Plugin[];
   previousUpdates?: Update[];
+}
+
+export enum PluginType {
+  Bundled = 'BUNDLED',
+  External = 'EXTERNAL'
 }
 
 export function isAvailablePlugin(plugin: Plugin): plugin is AvailablePlugin {

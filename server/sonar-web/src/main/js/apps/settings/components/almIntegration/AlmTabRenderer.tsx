@@ -20,32 +20,35 @@
 import * as React from 'react';
 import { FormattedMessage } from 'react-intl';
 import { Link } from 'react-router';
+import { Button } from 'sonar-ui-common/components/controls/buttons';
+import Tooltip from 'sonar-ui-common/components/controls/Tooltip';
 import DeferredSpinner from 'sonar-ui-common/components/ui/DeferredSpinner';
 import { translate } from 'sonar-ui-common/helpers/l10n';
-import { AlmBindingDefinition, AlmKeys } from '../../../../types/alm-settings';
+import { getEdition, getEditionUrl } from '../../../../helpers/editions';
+import {
+  AlmBindingDefinition,
+  AlmKeys,
+  AlmSettingsBindingStatus
+} from '../../../../types/alm-settings';
+import { EditionKey } from '../../../../types/editions';
+import AlmBindingDefinitionBox from './AlmBindingDefinitionBox';
 import AlmBindingDefinitionForm, {
   AlmBindingDefinitionFormChildrenProps
 } from './AlmBindingDefinitionForm';
-import AlmBindingDefinitionsTable from './AlmBindingDefinitionsTable';
-import AlmIntegrationFeatureBox, {
-  AlmIntegrationFeatureBoxProps
-} from './AlmIntegrationFeatureBox';
 
 export interface AlmTabRendererProps<B> {
-  additionalColumnsHeaders: string[];
-  additionalColumnsKeys: Array<keyof B>;
-  additionalTableInfo?: React.ReactNode;
   alm: AlmKeys;
+  definitionStatus: T.Dict<AlmSettingsBindingStatus>;
   editedDefinition?: B;
   defaultBinding: B;
   definitions: B[];
-  features?: AlmIntegrationFeatureBoxProps[];
   form: (props: AlmBindingDefinitionFormChildrenProps<B>) => React.ReactNode;
   help?: React.ReactNode;
   loadingAlmDefinitions: boolean;
   loadingProjectCount: boolean;
   multipleAlmEnabled: boolean;
   onCancel: () => void;
+  onCheck: (definitionKey: string) => void;
   onCreate: () => void;
   onDelete: (definitionKey: string) => void;
   onEdit: (definitionKey: string) => void;
@@ -55,115 +58,99 @@ export interface AlmTabRendererProps<B> {
   success: boolean;
 }
 
+const renderDefaultHelp = (alm: AlmKeys) => (
+  <FormattedMessage
+    defaultMessage={translate(`settings.almintegration.${alm}.info`)}
+    id={`settings.almintegration.${alm}.info`}
+    values={{
+      link: (
+        <Link target="_blank" to="/documentation/analysis/pr-decoration/">
+          {translate('learn_more')}
+        </Link>
+      )
+    }}
+  />
+);
+
 export default function AlmTabRenderer<B extends AlmBindingDefinition>(
   props: AlmTabRendererProps<B>
 ) {
   const {
-    additionalColumnsHeaders,
-    additionalColumnsKeys,
-    additionalTableInfo,
     alm,
-    defaultBinding,
     definitions,
+    definitionStatus,
     editedDefinition,
-    features = [],
     form,
     loadingAlmDefinitions,
     loadingProjectCount,
     multipleAlmEnabled,
     optionalFields,
-    submitting,
-    success,
-    help = (
-      <FormattedMessage
-        defaultMessage={translate(`settings.almintegration.${alm}.info`)}
-        id={`settings.almintegration.${alm}.info`}
-        values={{
-          link: (
-            <Link target="_blank" to="/documentation/analysis/pr-decoration/">
-              {translate('learn_more')}
-            </Link>
-          )
-        }}
-      />
-    )
+    help = renderDefaultHelp(alm)
   } = props;
 
-  let definition: B | undefined;
-  let mappedDefinitions: Array<{ key: string; additionalColumns: string[] }> = [];
-  let showEdit: boolean | undefined;
-
-  if (!multipleAlmEnabled) {
-    definition = editedDefinition;
-    if (definition === undefined && definitions.length > 0) {
-      definition = definitions[0];
-    }
-    showEdit = definition && editedDefinition === undefined;
-  } else {
-    mappedDefinitions = definitions.map(({ key, ...properties }) => {
-      const additionalColumns = additionalColumnsKeys.map(k => (properties as any)[k]);
-      return {
-        key,
-        additionalColumns
-      };
-    });
-  }
+  const preventCreation = loadingProjectCount || (!multipleAlmEnabled && definitions.length > 0);
+  const creationTooltip = preventCreation ? (
+    <FormattedMessage
+      id="settings.almintegration.create.tooltip"
+      defaultMessage={translate('settings.almintegration.create.tooltip')}
+      values={{
+        link: (
+          <a
+            href={getEditionUrl(getEdition(EditionKey.enterprise), {
+              sourceEdition: EditionKey.developer
+            })}
+            rel="noopener noreferrer"
+            target="_blank">
+            {translate('settings.almintegration.create.tooltip.link')}
+          </a>
+        ),
+        alm: translate('alm', alm)
+      }}
+    />
+  ) : null;
 
   return (
     <div className="big-padded">
-      {multipleAlmEnabled ? (
-        <DeferredSpinner loading={loadingAlmDefinitions}>
-          <AlmBindingDefinitionsTable
-            additionalColumnsHeaders={additionalColumnsHeaders}
-            additionalTableInfo={additionalTableInfo}
+      <DeferredSpinner loading={loadingAlmDefinitions}>
+        {definitions.length === 0 && (
+          <p className="spacer-top">{translate('settings.almintegration.empty', alm)}</p>
+        )}
+
+        <div className={definitions.length > 0 ? 'spacer-bottom text-right' : 'big-spacer-top'}>
+          <Tooltip overlay={creationTooltip} mouseLeaveDelay={0.25}>
+            <Button
+              data-test="settings__alm-create"
+              disabled={preventCreation}
+              onClick={props.onCreate}>
+              {translate('settings.almintegration.create')}
+            </Button>
+          </Tooltip>
+        </div>
+        {definitions.map(def => (
+          <AlmBindingDefinitionBox
             alm={alm}
-            definitions={mappedDefinitions}
-            loading={loadingProjectCount}
-            onCreate={props.onCreate}
+            definition={def}
+            key={def.key}
+            multipleDefinitions={definitions.length > 1}
+            onCheck={props.onCheck}
             onDelete={props.onDelete}
             onEdit={props.onEdit}
+            status={definitionStatus[def.key]}
           />
+        ))}
 
-          {editedDefinition && (
-            <AlmBindingDefinitionForm
-              bindingDefinition={editedDefinition}
-              help={help}
-              onCancel={props.onCancel}
-              onSubmit={props.onSubmit}
-              optionalFields={optionalFields}
-              showInModal={true}>
-              {form}
-            </AlmBindingDefinitionForm>
-          )}
-        </DeferredSpinner>
-      ) : (
-        <AlmBindingDefinitionForm
-          bindingDefinition={definition || defaultBinding}
-          help={help}
-          hideKeyField={true}
-          loading={loadingAlmDefinitions || loadingProjectCount || submitting}
-          onCancel={props.onCancel}
-          onDelete={definition ? props.onDelete : undefined}
-          onEdit={showEdit ? props.onEdit : undefined}
-          onSubmit={props.onSubmit}
-          optionalFields={optionalFields}
-          readOnly={showEdit}
-          success={success}>
-          {form}
-        </AlmBindingDefinitionForm>
-      )}
-
-      {features.length > 0 && (
-        <div className="big-spacer-top big-padded-top bordered-top">
-          <h3 className="big-spacer-bottom">{translate('settings.almintegration.features')}</h3>
-
-          <div className="display-flex-wrap">
-            {features.map((feature, i) => (
-              <AlmIntegrationFeatureBox key={i} {...feature} />
-            ))}
-          </div>
-        </div>
-      )}
+        {editedDefinition && (
+          <AlmBindingDefinitionForm
+            bindingDefinition={editedDefinition}
+            help={help}
+            isSecondInstance={definitions.length === 1}
+            onCancel={props.onCancel}
+            onSubmit={props.onSubmit}
+            optionalFields={optionalFields}>
+            {form}
+          </AlmBindingDefinitionForm>
+        )}
+      </DeferredSpinner>
     </div>
   );
 }

@@ -22,7 +22,6 @@ package org.sonar.server.user.ws;
 import java.util.Collections;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.sonar.api.resources.Qualifiers;
 import org.sonar.api.resources.ResourceType;
 import org.sonar.api.resources.ResourceTypeTree;
@@ -34,7 +33,6 @@ import org.sonar.db.DbTester;
 import org.sonar.db.component.ComponentDto;
 import org.sonar.db.user.UserDto;
 import org.sonar.server.issue.AvatarResolverImpl;
-import org.sonar.server.organization.TestDefaultOrganizationProvider;
 import org.sonar.server.permission.PermissionService;
 import org.sonar.server.permission.PermissionServiceImpl;
 import org.sonar.server.tester.UserSessionRule;
@@ -43,13 +41,13 @@ import org.sonarqube.ws.Users.CurrentWsResponse;
 
 import static com.google.common.collect.Lists.newArrayList;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.Mockito.mock;
 import static org.sonar.api.web.UserRole.USER;
-import static org.sonar.db.permission.OrganizationPermission.ADMINISTER;
-import static org.sonar.db.permission.OrganizationPermission.ADMINISTER_QUALITY_PROFILES;
-import static org.sonar.db.permission.OrganizationPermission.PROVISION_PROJECTS;
-import static org.sonar.db.permission.OrganizationPermission.SCAN;
+import static org.sonar.db.permission.GlobalPermission.ADMINISTER_QUALITY_PROFILES;
+import static org.sonar.db.permission.GlobalPermission.PROVISION_PROJECTS;
+import static org.sonar.db.permission.GlobalPermission.SCAN;
 import static org.sonar.db.user.GroupTesting.newGroupDto;
 import static org.sonar.test.JsonAssert.assertJson;
 
@@ -58,17 +56,13 @@ public class CurrentActionTest {
   public UserSessionRule userSession = UserSessionRule.standalone();
   @Rule
   public DbTester db = DbTester.create(System2.INSTANCE);
-  @Rule
-  public ExpectedException expectedException = ExpectedException.none();
 
-  private PlatformEditionProvider platformEditionProvider = mock(PlatformEditionProvider.class);
-  private HomepageTypesImpl homepageTypes = new HomepageTypesImpl();
-  private PermissionService permissionService = new PermissionServiceImpl(new ResourceTypes(new ResourceTypeTree[] {
+  private final PlatformEditionProvider platformEditionProvider = mock(PlatformEditionProvider.class);
+  private final HomepageTypesImpl homepageTypes = new HomepageTypesImpl();
+  private final PermissionService permissionService = new PermissionServiceImpl(new ResourceTypes(new ResourceTypeTree[] {
     ResourceTypeTree.builder().addType(ResourceType.builder(Qualifiers.PROJECT).build()).build()}));
-
-  private WsActionTester ws = new WsActionTester(
-    new CurrentAction(userSession, db.getDbClient(), TestDefaultOrganizationProvider.from(db), new AvatarResolverImpl(), homepageTypes, platformEditionProvider,
-      permissionService));
+  private final WsActionTester ws = new WsActionTester(
+    new CurrentAction(userSession, db.getDbClient(), new AvatarResolverImpl(), homepageTypes, platformEditionProvider, permissionService));
 
   @Test
   public void return_user_info() {
@@ -147,13 +141,10 @@ public class CurrentActionTest {
     userSession
       .logIn(user)
       // permissions on default organization
-      .addPermission(SCAN, db.getDefaultOrganization())
-      .addPermission(ADMINISTER_QUALITY_PROFILES, db.getDefaultOrganization())
-      // permissions on other organizations are ignored
-      .addPermission(ADMINISTER, db.organizations().insert());
+      .addPermission(SCAN)
+      .addPermission(ADMINISTER_QUALITY_PROFILES);
 
     CurrentWsResponse response = call();
-
     assertThat(response.getPermissions().getGlobalList()).containsOnly("profileadmin", "scan");
   }
 
@@ -183,18 +174,17 @@ public class CurrentActionTest {
     db.users().insertUser(usert -> usert.setLogin("another"));
     userSession.logIn("obiwan.kenobi");
 
-    expectedException.expect(IllegalStateException.class);
-    expectedException.expectMessage("User login 'obiwan.kenobi' cannot be found");
-
-    call();
+    assertThatThrownBy(this::call)
+      .isInstanceOf(IllegalStateException.class)
+      .hasMessage("User login 'obiwan.kenobi' cannot be found");
   }
 
   @Test
   public void anonymous() {
     userSession
       .anonymous()
-      .addPermission(SCAN, db.getDefaultOrganization())
-      .addPermission(PROVISION_PROJECTS, db.getDefaultOrganization());
+      .addPermission(SCAN)
+      .addPermission(PROVISION_PROJECTS);
 
     CurrentWsResponse response = call();
 
@@ -224,8 +214,8 @@ public class CurrentActionTest {
       .setHomepageParameter("UUID-of-the-death-star"));
     userSession
       .logIn(obiwan)
-      .addPermission(SCAN, db.getDefaultOrganization())
-      .addPermission(ADMINISTER_QUALITY_PROFILES, db.getDefaultOrganization())
+      .addPermission(SCAN)
+      .addPermission(ADMINISTER_QUALITY_PROFILES)
       .addProjectPermission(USER, db.components().getProjectDto(componentDto));
     db.users().insertMember(db.users().insertGroup(newGroupDto().setName("Jedi")), obiwan);
     db.users().insertMember(db.users().insertGroup(newGroupDto().setName("Rebel")), obiwan);

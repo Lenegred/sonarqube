@@ -27,23 +27,17 @@ import org.sonar.api.server.ws.WebService;
 import org.sonar.db.DbClient;
 import org.sonar.db.DbSession;
 import org.sonar.db.component.ComponentDto;
-import org.sonar.db.organization.OrganizationDto;
-import org.sonar.server.exceptions.NotFoundException;
 import org.sonar.server.permission.PermissionChange;
 import org.sonar.server.permission.PermissionService;
 import org.sonar.server.permission.PermissionUpdater;
-import org.sonar.server.permission.ProjectUuid;
 import org.sonar.server.permission.UserId;
 import org.sonar.server.permission.UserPermissionChange;
 import org.sonar.server.user.UserSession;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static java.util.Collections.singletonList;
 import static org.sonar.server.permission.PermissionPrivilegeChecker.checkProjectAdmin;
-import static org.sonar.server.permission.ws.WsParameters.createOrganizationParameter;
 import static org.sonar.server.permission.ws.WsParameters.createProjectParameters;
 import static org.sonar.server.permission.ws.WsParameters.createUserLoginParameter;
-import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_ORGANIZATION;
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_PERMISSION;
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_USER_LOGIN;
 
@@ -84,11 +78,9 @@ public class AddUserAction implements PermissionsWsAction {
       .setChangelog(
         new Change("7.4", "If organizationKey and projectId are both set, the organisationKey must be the key of the organization of the project"));
 
-    wsParameters.createPermissionParameter(action);
+    wsParameters.createPermissionParameter(action, "The permission you would like to grant to the user");
     createUserLoginParameter(action);
     createProjectParameters(action);
-    createOrganizationParameter(action)
-      .setSince("6.2");
   }
 
   @Override
@@ -96,22 +88,12 @@ public class AddUserAction implements PermissionsWsAction {
     try (DbSession dbSession = dbClient.openSession(false)) {
       UserId user = wsSupport.findUser(dbSession, request.mandatoryParam(PARAM_USER_LOGIN));
       Optional<ComponentDto> project = wsSupport.findProject(dbSession, request);
-      String organizationKey = request.param(PARAM_ORGANIZATION);
-      OrganizationDto org = project
-        .map(dto -> dbClient.organizationDao().selectByUuid(dbSession, dto.getOrganizationUuid()))
-        .orElseGet(() -> Optional.ofNullable(wsSupport.findOrganization(dbSession, organizationKey)))
-        .orElseThrow(() -> new NotFoundException(String.format("Organization with key '%s' not found", organizationKey)));
-      checkArgument(organizationKey == null || org.getKey().equals(organizationKey), "Organization key is incorrect.");
-      wsSupport.checkMembership(dbSession, org, user);
-
-      Optional<ProjectUuid> projectUuid = project.map(ProjectUuid::new);
-      checkProjectAdmin(userSession, org.getUuid(), projectUuid);
+      checkProjectAdmin(userSession, project.orElse(null));
 
       PermissionChange change = new UserPermissionChange(
         PermissionChange.Operation.ADD,
-        org.getUuid(),
         request.mandatoryParam(PARAM_PERMISSION),
-        projectUuid.orElse(null),
+        project.orElse(null),
         user, permissionService);
       permissionUpdater.apply(dbSession, singletonList(change));
     }

@@ -37,9 +37,8 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
-import org.apache.commons.lang.BooleanUtils;
 import org.apache.commons.lang.StringUtils;
-import org.elasticsearch.action.search.SearchRequestBuilder;
+import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.index.query.BoolQueryBuilder;
 import org.elasticsearch.index.query.QueryBuilder;
@@ -49,21 +48,21 @@ import org.elasticsearch.search.aggregations.AggregationBuilder;
 import org.elasticsearch.search.aggregations.AggregationBuilders;
 import org.elasticsearch.search.aggregations.BucketOrder;
 import org.elasticsearch.search.aggregations.HasAggregations;
+import org.elasticsearch.search.aggregations.bucket.MultiBucketsAggregation;
 import org.elasticsearch.search.aggregations.bucket.filter.FilterAggregationBuilder;
-import org.elasticsearch.search.aggregations.bucket.filter.InternalFilter;
+import org.elasticsearch.search.aggregations.bucket.filter.ParsedFilter;
 import org.elasticsearch.search.aggregations.bucket.histogram.DateHistogramInterval;
 import org.elasticsearch.search.aggregations.bucket.histogram.ExtendedBounds;
 import org.elasticsearch.search.aggregations.bucket.terms.IncludeExclude;
-import org.elasticsearch.search.aggregations.bucket.terms.InternalTerms;
-import org.elasticsearch.search.aggregations.bucket.terms.StringTerms;
+import org.elasticsearch.search.aggregations.bucket.terms.ParsedStringTerms;
 import org.elasticsearch.search.aggregations.bucket.terms.Terms;
 import org.elasticsearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
-import org.elasticsearch.search.aggregations.metrics.max.InternalMax;
-import org.elasticsearch.search.aggregations.metrics.min.Min;
-import org.elasticsearch.search.aggregations.metrics.sum.SumAggregationBuilder;
-import org.elasticsearch.search.aggregations.metrics.valuecount.InternalValueCount;
+import org.elasticsearch.search.aggregations.metrics.Min;
+import org.elasticsearch.search.aggregations.metrics.ParsedMax;
+import org.elasticsearch.search.aggregations.metrics.ParsedValueCount;
+import org.elasticsearch.search.aggregations.metrics.SumAggregationBuilder;
+import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.elasticsearch.search.sort.FieldSortBuilder;
-import org.joda.time.DateTimeZone;
 import org.joda.time.Duration;
 import org.sonar.api.issue.Issue;
 import org.sonar.api.rule.Severity;
@@ -89,6 +88,7 @@ import org.sonar.server.issue.index.IssueQuery.PeriodStart;
 import org.sonar.server.permission.index.AuthorizationDoc;
 import org.sonar.server.permission.index.WebAuthorizationTypeSupport;
 import org.sonar.server.security.SecurityStandards;
+import org.sonar.server.security.SecurityStandards.SQCategory;
 import org.sonar.server.user.UserSession;
 import org.sonar.server.view.index.ViewIndexDefinition;
 
@@ -119,7 +119,7 @@ import static org.sonar.server.issue.index.IssueIndex.Facet.AUTHORS;
 import static org.sonar.server.issue.index.IssueIndex.Facet.CREATED_AT;
 import static org.sonar.server.issue.index.IssueIndex.Facet.CWE;
 import static org.sonar.server.issue.index.IssueIndex.Facet.DIRECTORIES;
-import static org.sonar.server.issue.index.IssueIndex.Facet.FILE_UUIDS;
+import static org.sonar.server.issue.index.IssueIndex.Facet.FILES;
 import static org.sonar.server.issue.index.IssueIndex.Facet.LANGUAGES;
 import static org.sonar.server.issue.index.IssueIndex.Facet.MODULE_UUIDS;
 import static org.sonar.server.issue.index.IssueIndex.Facet.OWASP_TOP_10;
@@ -127,6 +127,7 @@ import static org.sonar.server.issue.index.IssueIndex.Facet.PROJECT_UUIDS;
 import static org.sonar.server.issue.index.IssueIndex.Facet.RESOLUTIONS;
 import static org.sonar.server.issue.index.IssueIndex.Facet.RULES;
 import static org.sonar.server.issue.index.IssueIndex.Facet.SANS_TOP_25;
+import static org.sonar.server.issue.index.IssueIndex.Facet.SCOPES;
 import static org.sonar.server.issue.index.IssueIndex.Facet.SEVERITIES;
 import static org.sonar.server.issue.index.IssueIndex.Facet.SONARSOURCE_SECURITY;
 import static org.sonar.server.issue.index.IssueIndex.Facet.STATUSES;
@@ -155,6 +156,7 @@ import static org.sonar.server.issue.index.IssueIndexDefinition.FIELD_ISSUE_PROJ
 import static org.sonar.server.issue.index.IssueIndexDefinition.FIELD_ISSUE_RESOLUTION;
 import static org.sonar.server.issue.index.IssueIndexDefinition.FIELD_ISSUE_RULE_UUID;
 import static org.sonar.server.issue.index.IssueIndexDefinition.FIELD_ISSUE_SANS_TOP_25;
+import static org.sonar.server.issue.index.IssueIndexDefinition.FIELD_ISSUE_SCOPE;
 import static org.sonar.server.issue.index.IssueIndexDefinition.FIELD_ISSUE_SEVERITY;
 import static org.sonar.server.issue.index.IssueIndexDefinition.FIELD_ISSUE_SEVERITY_VALUE;
 import static org.sonar.server.issue.index.IssueIndexDefinition.FIELD_ISSUE_SQ_SECURITY_CATEGORY;
@@ -176,13 +178,14 @@ import static org.sonarqube.ws.client.issue.IssuesWsParameters.PARAM_AUTHOR;
 import static org.sonarqube.ws.client.issue.IssuesWsParameters.PARAM_CREATED_AT;
 import static org.sonarqube.ws.client.issue.IssuesWsParameters.PARAM_CWE;
 import static org.sonarqube.ws.client.issue.IssuesWsParameters.PARAM_DIRECTORIES;
-import static org.sonarqube.ws.client.issue.IssuesWsParameters.PARAM_FILE_UUIDS;
+import static org.sonarqube.ws.client.issue.IssuesWsParameters.PARAM_FILES;
 import static org.sonarqube.ws.client.issue.IssuesWsParameters.PARAM_LANGUAGES;
 import static org.sonarqube.ws.client.issue.IssuesWsParameters.PARAM_MODULE_UUIDS;
 import static org.sonarqube.ws.client.issue.IssuesWsParameters.PARAM_OWASP_TOP_10;
 import static org.sonarqube.ws.client.issue.IssuesWsParameters.PARAM_RESOLUTIONS;
 import static org.sonarqube.ws.client.issue.IssuesWsParameters.PARAM_RULES;
 import static org.sonarqube.ws.client.issue.IssuesWsParameters.PARAM_SANS_TOP_25;
+import static org.sonarqube.ws.client.issue.IssuesWsParameters.PARAM_SCOPES;
 import static org.sonarqube.ws.client.issue.IssuesWsParameters.PARAM_SEVERITIES;
 import static org.sonarqube.ws.client.issue.IssuesWsParameters.PARAM_SONARSOURCE_SECURITY;
 import static org.sonarqube.ws.client.issue.IssuesWsParameters.PARAM_STATUSES;
@@ -231,6 +234,7 @@ public class IssueIndex {
     // Resolutions facet returns one more element than the number of resolutions to take into account unresolved issues
     RESOLUTIONS(PARAM_RESOLUTIONS, FIELD_ISSUE_RESOLUTION, STICKY, Issue.RESOLUTIONS.size() + 1),
     TYPES(PARAM_TYPES, FIELD_ISSUE_TYPE, STICKY, RuleType.values().length),
+    SCOPES(PARAM_SCOPES, FIELD_ISSUE_SCOPE, STICKY, MAX_FACET_SIZE),
     LANGUAGES(PARAM_LANGUAGES, FIELD_ISSUE_LANGUAGE, STICKY, MAX_FACET_SIZE),
     RULES(PARAM_RULES, FIELD_ISSUE_RULE_UUID, STICKY, MAX_FACET_SIZE),
     TAGS(PARAM_TAGS, FIELD_ISSUE_TAGS, STICKY, MAX_FACET_SIZE),
@@ -238,7 +242,7 @@ public class IssueIndex {
     AUTHOR(PARAM_AUTHOR, FIELD_ISSUE_AUTHOR_LOGIN, STICKY, MAX_FACET_SIZE),
     PROJECT_UUIDS(FACET_PROJECTS, FIELD_ISSUE_PROJECT_UUID, STICKY, MAX_FACET_SIZE),
     MODULE_UUIDS(PARAM_MODULE_UUIDS, FIELD_ISSUE_MODULE_UUID, STICKY, MAX_FACET_SIZE),
-    FILE_UUIDS(PARAM_FILE_UUIDS, FIELD_ISSUE_COMPONENT_UUID, STICKY, MAX_FACET_SIZE),
+    FILES(PARAM_FILES, FIELD_ISSUE_FILE_PATH, STICKY, MAX_FACET_SIZE),
     DIRECTORIES(PARAM_DIRECTORIES, FIELD_ISSUE_DIRECTORY_PATH, STICKY, MAX_FACET_SIZE),
     ASSIGNEES(PARAM_ASSIGNEES, FIELD_ISSUE_ASSIGNEE_UUID, STICKY, MAX_FACET_SIZE),
     ASSIGNED_TO_ME(FACET_ASSIGNED_TO_ME, FIELD_ISSUE_ASSIGNEE_UUID, STICKY, 1),
@@ -341,39 +345,41 @@ public class IssueIndex {
   }
 
   public SearchResponse search(IssueQuery query, SearchOptions options) {
-    SearchRequestBuilder esRequest = client.prepareSearch(TYPE_ISSUE.getMainType());
+    SearchRequest requestBuilder = EsClient.prepareSearch(TYPE_ISSUE.getMainType());
+    SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
+    requestBuilder.source(sourceBuilder);
 
-    configureSorting(query, esRequest);
-    configurePagination(options, esRequest);
-    configureRouting(query, options, esRequest);
+    configureSorting(query, sourceBuilder);
+    configurePagination(options, sourceBuilder);
+    configureRouting(query, options, requestBuilder);
 
     AllFilters allFilters = createAllFilters(query);
     RequestFiltersComputer filterComputer = newFilterComputer(options, allFilters);
 
-    configureTopAggregations(query, options, esRequest, allFilters, filterComputer);
-    configureQuery(esRequest, filterComputer);
-    configureTopFilters(esRequest, filterComputer);
+    configureTopAggregations(query, options, sourceBuilder, allFilters, filterComputer);
+    configureQuery(sourceBuilder, filterComputer);
+    configureTopFilters(sourceBuilder, filterComputer);
 
-    esRequest.setFetchSource(false);
+    sourceBuilder.fetchSource(false);
 
-    return esRequest.get();
+    return client.search(requestBuilder);
   }
 
-  private void configureTopAggregations(IssueQuery query, SearchOptions options, SearchRequestBuilder esRequest, AllFilters allFilters, RequestFiltersComputer filterComputer) {
+  private void configureTopAggregations(IssueQuery query, SearchOptions options, SearchSourceBuilder esRequest, AllFilters allFilters, RequestFiltersComputer filterComputer) {
     TopAggregationHelper aggregationHelper = newAggregationHelper(filterComputer, query);
 
     configureTopAggregations(aggregationHelper, query, options, allFilters, esRequest);
   }
 
-  private static void configureQuery(SearchRequestBuilder esRequest, RequestFiltersComputer filterComputer) {
+  private static void configureQuery(SearchSourceBuilder esRequest, RequestFiltersComputer filterComputer) {
     QueryBuilder esQuery = filterComputer.getQueryFilters()
       .map(t -> (QueryBuilder) boolQuery().must(matchAllQuery()).filter(t))
       .orElse(matchAllQuery());
-    esRequest.setQuery(esQuery);
+    esRequest.query(esQuery);
   }
 
-  private static void configureTopFilters(SearchRequestBuilder esRequest, RequestFiltersComputer filterComputer) {
-    filterComputer.getPostFilters().ifPresent(esRequest::setPostFilter);
+  private static void configureTopFilters(SearchSourceBuilder esRequest, RequestFiltersComputer filterComputer) {
+    filterComputer.getPostFilters().ifPresent(esRequest::postFilter);
   }
 
   /**
@@ -383,15 +389,15 @@ public class IssueIndex {
    * Note that sticky facets may involve all projects, so this optimization must be
    * disabled when facets are enabled.
    */
-  private static void configureRouting(IssueQuery query, SearchOptions options, SearchRequestBuilder requestBuilder) {
+  private static void configureRouting(IssueQuery query, SearchOptions options, SearchRequest searchRequest) {
     Collection<String> uuids = query.projectUuids();
     if (!uuids.isEmpty() && options.getFacets().isEmpty()) {
-      requestBuilder.setRouting(uuids.stream().map(AuthorizationDoc::idOf).toArray(String[]::new));
+      searchRequest.routing(uuids.stream().map(AuthorizationDoc::idOf).toArray(String[]::new));
     }
   }
 
-  private static void configurePagination(SearchOptions options, SearchRequestBuilder esSearch) {
-    esSearch.setFrom(options.getOffset()).setSize(options.getLimit());
+  private static void configurePagination(SearchOptions options, SearchSourceBuilder esSearch) {
+    esSearch.from(options.getOffset()).size(options.getLimit());
   }
 
   private AllFilters createAllFilters(IssueQuery query) {
@@ -400,22 +406,23 @@ public class IssueIndex {
     filters.addFilter("__authorization", new SimpleFieldFilterScope("parent"), createAuthorizationFilter());
 
     // Issue is assigned Filter
-    if (BooleanUtils.isTrue(query.assigned())) {
+    if (Boolean.TRUE.equals(query.assigned())) {
       filters.addFilter(IS_ASSIGNED_FILTER, Facet.ASSIGNEES.getFilterScope(), existsQuery(FIELD_ISSUE_ASSIGNEE_UUID));
-    } else if (BooleanUtils.isFalse(query.assigned())) {
+    } else if (Boolean.FALSE.equals(query.assigned())) {
       filters.addFilter(IS_ASSIGNED_FILTER, ASSIGNEES.getFilterScope(), boolQuery().mustNot(existsQuery(FIELD_ISSUE_ASSIGNEE_UUID)));
     }
 
     // Issue is Resolved Filter
-    if (BooleanUtils.isTrue(query.resolved())) {
+    if (Boolean.TRUE.equals(query.resolved())) {
       filters.addFilter("__isResolved", Facet.RESOLUTIONS.getFilterScope(), existsQuery(FIELD_ISSUE_RESOLUTION));
-    } else if (BooleanUtils.isFalse(query.resolved())) {
+    } else if (Boolean.FALSE.equals(query.resolved())) {
       filters.addFilter("__isResolved", Facet.RESOLUTIONS.getFilterScope(), boolQuery().mustNot(existsQuery(FIELD_ISSUE_RESOLUTION)));
     }
 
     // Field Filters
     filters.addFilter(FIELD_ISSUE_KEY, new SimpleFieldFilterScope(FIELD_ISSUE_KEY), createTermsFilter(FIELD_ISSUE_KEY, query.issueKeys()));
     filters.addFilter(FIELD_ISSUE_ASSIGNEE_UUID, ASSIGNEES.getFilterScope(), createTermsFilter(FIELD_ISSUE_ASSIGNEE_UUID, query.assignees()));
+    filters.addFilter(FIELD_ISSUE_SCOPE, SCOPES.getFilterScope(), createTermsFilter(FIELD_ISSUE_SCOPE, query.scopes()));
     filters.addFilter(FIELD_ISSUE_LANGUAGE, LANGUAGES.getFilterScope(), createTermsFilter(FIELD_ISSUE_LANGUAGE, query.languages()));
     filters.addFilter(FIELD_ISSUE_TAGS, TAGS.getFilterScope(), createTermsFilter(FIELD_ISSUE_TAGS, query.tags()));
     filters.addFilter(FIELD_ISSUE_TYPE, TYPES.getFilterScope(), createTermsFilter(FIELD_ISSUE_TYPE, query.types()));
@@ -433,22 +440,31 @@ public class IssueIndex {
     filters.addFilter(
       FIELD_ISSUE_ORGANIZATION_UUID, new SimpleFieldFilterScope(FIELD_ISSUE_ORGANIZATION_UUID),
       createTermFilter(FIELD_ISSUE_ORGANIZATION_UUID, query.organizationUuid()));
-    filters.addFilter(
-      FIELD_ISSUE_OWASP_TOP_10, OWASP_TOP_10.getFilterScope(),
-      createTermsFilter(FIELD_ISSUE_OWASP_TOP_10, query.owaspTop10()));
-    filters.addFilter(
-      FIELD_ISSUE_SANS_TOP_25, SANS_TOP_25.getFilterScope(),
-      createTermsFilter(FIELD_ISSUE_SANS_TOP_25, query.sansTop25()));
-    filters.addFilter(FIELD_ISSUE_CWE, CWE.getFilterScope(), createTermsFilter(FIELD_ISSUE_CWE, query.cwe()));
+
+    // security category
+    addSecurityCategoryFilter(FIELD_ISSUE_OWASP_TOP_10, OWASP_TOP_10, query.owaspTop10(), filters);
+    addSecurityCategoryFilter(FIELD_ISSUE_SANS_TOP_25, SANS_TOP_25, query.sansTop25(), filters);
+    addSecurityCategoryFilter(FIELD_ISSUE_CWE, CWE, query.cwe(), filters);
+    addSecurityCategoryFilter(FIELD_ISSUE_SQ_SECURITY_CATEGORY, SONARSOURCE_SECURITY, query.sonarsourceSecurity(), filters);
+
     addSeverityFilter(query, filters);
-    filters.addFilter(
-      FIELD_ISSUE_SQ_SECURITY_CATEGORY, SONARSOURCE_SECURITY.getFilterScope(),
-      createTermsFilter(FIELD_ISSUE_SQ_SECURITY_CATEGORY, query.sonarsourceSecurity()));
 
     addComponentRelatedFilters(query, filters);
     addDatesFilter(filters, query);
     addCreatedAfterByProjectsFilter(filters, query);
     return filters;
+  }
+
+  private static void addSecurityCategoryFilter(String fieldName, Facet facet, Collection<String> values, AllFilters allFilters) {
+    QueryBuilder securityCategoryFilter = createTermsFilter(fieldName, values);
+    if (securityCategoryFilter != null) {
+      allFilters.addFilter(
+        fieldName,
+        facet.getFilterScope(),
+        boolQuery()
+          .must(securityCategoryFilter)
+          .must(termsQuery(FIELD_ISSUE_TYPE, VULNERABILITY.name(), SECURITY_HOTSPOT.name())));
+    }
   }
 
   private static void addSeverityFilter(IssueQuery query, AllFilters allFilters) {
@@ -474,12 +490,10 @@ public class IssueIndex {
   }
 
   private static void addCommonComponentRelatedFilters(IssueQuery query, AllFilters filters) {
-    QueryBuilder componentFilter = createTermsFilter(FIELD_ISSUE_COMPONENT_UUID, query.componentUuids());
-    QueryBuilder fileFilter = createTermsFilter(FIELD_ISSUE_COMPONENT_UUID, query.fileUuids());
+    filters.addFilter(FIELD_ISSUE_COMPONENT_UUID, new SimpleFieldFilterScope(FIELD_ISSUE_COMPONENT_UUID),
+      createTermsFilter(FIELD_ISSUE_COMPONENT_UUID, query.componentUuids()));
 
-    if (BooleanUtils.isTrue(query.onComponentOnly())) {
-      filters.addFilter(FIELD_ISSUE_COMPONENT_UUID, new SimpleFieldFilterScope(FIELD_ISSUE_COMPONENT_UUID), componentFilter);
-    } else {
+    if (!Boolean.TRUE.equals(query.onComponentOnly())) {
       filters.addFilter(
         FIELD_ISSUE_PROJECT_UUID, new SimpleFieldFilterScope(FIELD_ISSUE_PROJECT_UUID),
         createTermsFilter(FIELD_ISSUE_PROJECT_UUID, query.projectUuids()));
@@ -493,13 +507,13 @@ public class IssueIndex {
         FIELD_ISSUE_DIRECTORY_PATH, new SimpleFieldFilterScope(FIELD_ISSUE_DIRECTORY_PATH),
         createTermsFilter(FIELD_ISSUE_DIRECTORY_PATH, query.directories()));
       filters.addFilter(
-        FIELD_ISSUE_COMPONENT_UUID, new SimpleFieldFilterScope(FIELD_ISSUE_COMPONENT_UUID),
-        fileFilter == null ? componentFilter : fileFilter);
+        FIELD_ISSUE_FILE_PATH, new SimpleFieldFilterScope(FIELD_ISSUE_FILE_PATH),
+        createTermsFilter(FIELD_ISSUE_FILE_PATH, query.files()));
     }
   }
 
   private static void addBranchComponentRelatedFilters(IssueQuery query, AllFilters allFilters) {
-    if (BooleanUtils.isTrue(query.onComponentOnly())) {
+    if (Boolean.TRUE.equals(query.onComponentOnly())) {
       return;
     }
     allFilters.addFilter(
@@ -511,7 +525,7 @@ public class IssueIndex {
   }
 
   private static void addViewRelatedFilters(IssueQuery query, AllFilters allFilters) {
-    if (BooleanUtils.isTrue(query.onComponentOnly())) {
+    if (Boolean.TRUE.equals(query.onComponentOnly())) {
       return;
     }
     Collection<String> viewUuids = query.viewUuids();
@@ -585,14 +599,14 @@ public class IssueIndex {
     return value == null ? null : termQuery(field, value);
   }
 
-  private void configureSorting(IssueQuery query, SearchRequestBuilder esRequest) {
-    createSortBuilders(query).forEach(esRequest::addSort);
+  private void configureSorting(IssueQuery query, SearchSourceBuilder esRequest) {
+    createSortBuilders(query).forEach(esRequest::sort);
   }
 
   private List<FieldSortBuilder> createSortBuilders(IssueQuery query) {
     String sortField = query.sort();
     if (sortField != null) {
-      boolean asc = BooleanUtils.isTrue(query.asc());
+      boolean asc = Boolean.TRUE.equals(query.asc());
       return sorting.fill(sortField, asc);
     }
     return sorting.fillDefault();
@@ -633,10 +647,11 @@ public class IssueIndex {
   private static void addCreatedAfterByProjectsFilter(AllFilters allFilters, IssueQuery query) {
     Map<String, PeriodStart> createdAfterByProjectUuids = query.createdAfterByProjectUuids();
     BoolQueryBuilder boolQueryBuilder = boolQuery();
-    createdAfterByProjectUuids.forEach((projectUuid, createdAfterDate) -> boolQueryBuilder.should(boolQuery()
-      .filter(termQuery(FIELD_ISSUE_PROJECT_UUID, projectUuid))
+    createdAfterByProjectUuids.forEach((projectOrProjectBranchUuid, createdAfterDate) -> boolQueryBuilder.should(boolQuery()
+      .filter(termQuery(FIELD_ISSUE_BRANCH_UUID, projectOrProjectBranchUuid))
       .filter(rangeQuery(FIELD_ISSUE_FUNC_CREATED_AT).from(BaseDoc.dateToEpochSeconds(createdAfterDate.date()), createdAfterDate.inclusive()))));
-    allFilters.addFilter("createdAfterByProjectUuids", new SimpleFieldFilterScope("TODO::???"), boolQueryBuilder);
+
+    allFilters.addFilter("__created_after_by_project_uuids", new SimpleFieldFilterScope("createdAfterByProjectUuids"), boolQueryBuilder);
   }
 
   private void validateCreationDateBounds(@Nullable Date createdBefore, @Nullable Date createdAfter) {
@@ -647,22 +662,25 @@ public class IssueIndex {
   }
 
   private void configureTopAggregations(TopAggregationHelper aggregationHelper, IssueQuery query, SearchOptions options,
-    AllFilters queryFilters, SearchRequestBuilder esRequest) {
+    AllFilters queryFilters, SearchSourceBuilder esRequest) {
     addFacetIfNeeded(options, aggregationHelper, esRequest, STATUSES, NO_SELECTED_VALUES);
     addFacetIfNeeded(options, aggregationHelper, esRequest, PROJECT_UUIDS, query.projectUuids().toArray());
     addFacetIfNeeded(options, aggregationHelper, esRequest, MODULE_UUIDS, query.moduleUuids().toArray());
     addFacetIfNeeded(options, aggregationHelper, esRequest, DIRECTORIES, query.directories().toArray());
-    addFacetIfNeeded(options, aggregationHelper, esRequest, FILE_UUIDS, query.fileUuids().toArray());
+    addFacetIfNeeded(options, aggregationHelper, esRequest, FILES, query.files().toArray());
+    addFacetIfNeeded(options, aggregationHelper, esRequest, SCOPES, query.scopes().toArray());
     addFacetIfNeeded(options, aggregationHelper, esRequest, LANGUAGES, query.languages().toArray());
     addFacetIfNeeded(options, aggregationHelper, esRequest, RULES, query.rules().stream().map(RuleDefinitionDto::getUuid).toArray());
     addFacetIfNeeded(options, aggregationHelper, esRequest, AUTHORS, query.authors().toArray());
     addFacetIfNeeded(options, aggregationHelper, esRequest, AUTHOR, query.authors().toArray());
     addFacetIfNeeded(options, aggregationHelper, esRequest, TAGS, query.tags().toArray());
     addFacetIfNeeded(options, aggregationHelper, esRequest, TYPES, query.types().toArray());
-    addFacetIfNeeded(options, aggregationHelper, esRequest, OWASP_TOP_10, query.owaspTop10().toArray());
-    addFacetIfNeeded(options, aggregationHelper, esRequest, SANS_TOP_25, query.sansTop25().toArray());
-    addFacetIfNeeded(options, aggregationHelper, esRequest, CWE, query.cwe().toArray());
-    addFacetIfNeeded(options, aggregationHelper, esRequest, SONARSOURCE_SECURITY, query.sonarsourceSecurity().toArray());
+
+    addSecurityCategoryFacetIfNeeded(PARAM_OWASP_TOP_10, OWASP_TOP_10, options, aggregationHelper, esRequest, query.owaspTop10().toArray());
+    addSecurityCategoryFacetIfNeeded(PARAM_SANS_TOP_25, SANS_TOP_25, options, aggregationHelper, esRequest, query.sansTop25().toArray());
+    addSecurityCategoryFacetIfNeeded(PARAM_CWE, CWE, options, aggregationHelper, esRequest, query.cwe().toArray());
+    addSecurityCategoryFacetIfNeeded(PARAM_SONARSOURCE_SECURITY, SONARSOURCE_SECURITY, options, aggregationHelper, esRequest, query.sonarsourceSecurity().toArray());
+
     addSeverityFacetIfNeeded(options, aggregationHelper, esRequest);
     addResolutionFacetIfNeeded(options, query, aggregationHelper, esRequest);
     addAssigneesFacetIfNeeded(options, query, aggregationHelper, esRequest);
@@ -672,7 +690,7 @@ public class IssueIndex {
   }
 
   private static void addFacetIfNeeded(SearchOptions options, TopAggregationHelper aggregationHelper,
-    SearchRequestBuilder esRequest, Facet facet, Object[] selectedValues) {
+    SearchSourceBuilder esRequest, Facet facet, Object[] selectedValues) {
     if (!options.getFacets().contains(facet.getName())) {
       return;
     }
@@ -682,10 +700,24 @@ public class IssueIndex {
       NO_EXTRA_FILTER,
       t -> aggregationHelper.getSubAggregationHelper().buildSelectedItemsAggregation(facet.getName(), facet.getTopAggregationDef(), selectedValues)
         .ifPresent(t::subAggregation));
-    esRequest.addAggregation(topAggregation);
+    esRequest.aggregation(topAggregation);
   }
 
-  private static void addSeverityFacetIfNeeded(SearchOptions options, TopAggregationHelper aggregationHelper, SearchRequestBuilder esRequest) {
+  private static void addSecurityCategoryFacetIfNeeded(String param, Facet facet, SearchOptions options, TopAggregationHelper aggregationHelper, SearchSourceBuilder esRequest,
+    Object[] selectedValues) {
+    if (!options.getFacets().contains(param)) {
+      return;
+    }
+
+    AggregationBuilder aggregation = aggregationHelper.buildTermTopAggregation(
+      facet.getName(), facet.getTopAggregationDef(), facet.getNumberOfTerms(),
+      filter -> filter.must(termQuery(FIELD_ISSUE_TYPE, VULNERABILITY.name())),
+      t -> aggregationHelper.getSubAggregationHelper().buildSelectedItemsAggregation(facet.getName(), facet.getTopAggregationDef(), selectedValues)
+        .ifPresent(t::subAggregation));
+    esRequest.aggregation(aggregation);
+  }
+
+  private static void addSeverityFacetIfNeeded(SearchOptions options, TopAggregationHelper aggregationHelper, SearchSourceBuilder esRequest) {
     if (!options.getFacets().contains(PARAM_SEVERITIES)) {
       return;
     }
@@ -695,10 +727,10 @@ public class IssueIndex {
       // Ignore severity of Security HotSpots
       filter -> filter.mustNot(termQuery(FIELD_ISSUE_TYPE, SECURITY_HOTSPOT.name())),
       NO_OTHER_SUBAGGREGATION);
-    esRequest.addAggregation(aggregation);
+    esRequest.aggregation(aggregation);
   }
 
-  private static void addResolutionFacetIfNeeded(SearchOptions options, IssueQuery query, TopAggregationHelper aggregationHelper, SearchRequestBuilder esRequest) {
+  private static void addResolutionFacetIfNeeded(SearchOptions options, IssueQuery query, TopAggregationHelper aggregationHelper, SearchSourceBuilder esRequest) {
     if (!options.getFacets().contains(PARAM_RESOLUTIONS)) {
       return;
     }
@@ -713,10 +745,10 @@ public class IssueIndex {
             .missing(RESOLUTIONS.getName() + FACET_SUFFIX_MISSING)
             .field(RESOLUTIONS.getFieldName())));
       });
-    esRequest.addAggregation(aggregation);
+    esRequest.aggregation(aggregation);
   }
 
-  private static void addAssigneesFacetIfNeeded(SearchOptions options, IssueQuery query, TopAggregationHelper aggregationHelper, SearchRequestBuilder esRequest) {
+  private static void addAssigneesFacetIfNeeded(SearchOptions options, IssueQuery query, TopAggregationHelper aggregationHelper, SearchSourceBuilder esRequest) {
     if (!options.getFacets().contains(PARAM_ASSIGNEES)) {
       return;
     }
@@ -736,13 +768,13 @@ public class IssueIndex {
     AggregationBuilder aggregation = aggregationHelper.buildTermTopAggregation(
       ASSIGNEES.getName(), ASSIGNEES.getTopAggregationDef(), ASSIGNEES.getNumberOfTerms(),
       NO_EXTRA_FILTER, assigneeAggregations);
-    esRequest.addAggregation(aggregation);
+    esRequest.aggregation(aggregation);
   }
 
   private void addCreatedAtFacetIfNeeded(SearchOptions options, IssueQuery query, TopAggregationHelper aggregationHelper, AllFilters allFilters,
-    SearchRequestBuilder esRequest) {
+    SearchSourceBuilder esRequest) {
     if (options.getFacets().contains(PARAM_CREATED_AT)) {
-      getCreatedAtFacet(query, aggregationHelper, allFilters).ifPresent(esRequest::addAggregation);
+      getCreatedAtFacet(query, aggregationHelper, allFilters).ifPresent(esRequest::aggregation);
     }
   }
 
@@ -777,7 +809,7 @@ public class IssueIndex {
           .dateHistogramInterval(bucketSize)
           .minDocCount(0L)
           .format(DateUtils.DATETIME_FORMAT)
-          .timeZone(DateTimeZone.forOffsetMillis(system.getDefaultTimeZone().getRawOffset()))
+          .timeZone(system.getDefaultTimeZone().toZoneId())
           // ES dateHistogram bounds are inclusive while createdBefore parameter is exclusive
           .extendedBounds(new ExtendedBounds(startInclusive ? startTime : (startTime + 1), endTime - 1L));
         addEffortAggregationIfNeeded(query, dateHistogram);
@@ -802,17 +834,20 @@ public class IssueIndex {
 
   private OptionalLong getMinCreatedAt(AllFilters filters) {
     String facetNameAndField = CREATED_AT.getFieldName();
-    SearchRequestBuilder esRequest = client
-      .prepareSearch(TYPE_ISSUE.getMainType())
-      .setSize(0);
+
+    SearchSourceBuilder sourceBuilder = new SearchSourceBuilder()
+      .size(0);
     BoolQueryBuilder esFilter = boolQuery();
     filters.stream().filter(Objects::nonNull).forEach(esFilter::must);
     if (esFilter.hasClauses()) {
-      esRequest.setQuery(QueryBuilders.boolQuery().filter(esFilter));
+      sourceBuilder.query(QueryBuilders.boolQuery().filter(esFilter));
     }
-    esRequest.addAggregation(AggregationBuilders.min(facetNameAndField).field(facetNameAndField));
-    Min minValue = esRequest.get().getAggregations().get(facetNameAndField);
+    sourceBuilder.aggregation(AggregationBuilders.min(facetNameAndField).field(facetNameAndField));
 
+    SearchRequest request = EsClient.prepareSearch(TYPE_ISSUE.getMainType())
+      .source(sourceBuilder);
+
+    Min minValue = client.search(request).getAggregations().get(facetNameAndField);
     double actualValue = minValue.getValue();
     if (Double.isInfinite(actualValue)) {
       return OptionalLong.empty();
@@ -820,7 +855,7 @@ public class IssueIndex {
     return OptionalLong.of((long) actualValue);
   }
 
-  private void addAssignedToMeFacetIfNeeded(SearchOptions options, TopAggregationHelper aggregationHelper, SearchRequestBuilder esRequest) {
+  private void addAssignedToMeFacetIfNeeded(SearchOptions options, TopAggregationHelper aggregationHelper, SearchSourceBuilder esRequest) {
     String uuid = userSession.getUuid();
     if (options.getFacets().contains(ASSIGNED_TO_ME.getName()) && !StringUtils.isEmpty(uuid)) {
       AggregationBuilder aggregation = aggregationHelper.buildTermTopAggregation(
@@ -834,17 +869,17 @@ public class IssueIndex {
             .buildSelectedItemsAggregation(ASSIGNED_TO_ME.getName(), ASSIGNED_TO_ME.getTopAggregationDef(), new String[] {uuid})
             .ifPresent(t::subAggregation);
         });
-      esRequest.addAggregation(aggregation);
+      esRequest.aggregation(aggregation);
     }
   }
 
-  private static void addEffortTopAggregation(TopAggregationHelper aggregationHelper, SearchRequestBuilder esRequest) {
+  private static void addEffortTopAggregation(TopAggregationHelper aggregationHelper, SearchSourceBuilder esRequest) {
     AggregationBuilder topAggregation = aggregationHelper.buildTopAggregation(
       FACET_MODE_EFFORT,
       EFFORT_TOP_AGGREGATION,
       NO_EXTRA_FILTER,
       t -> t.subAggregation(EFFORT_AGGREGATION));
-    esRequest.addAggregation(topAggregation);
+    esRequest.aggregation(topAggregation);
   }
 
   public List<String> searchTags(IssueQuery query, @Nullable String textQuery, int size) {
@@ -863,12 +898,14 @@ public class IssueIndex {
   }
 
   private Terms listTermsMatching(String fieldName, IssueQuery query, @Nullable String textQuery, BucketOrder termsOrder, int size) {
-    SearchRequestBuilder requestBuilder = client
-      .prepareSearch(TYPE_ISSUE.getMainType())
-      // Avoids returning search hits
-      .setSize(0);
+    SearchRequest requestBuilder = EsClient.prepareSearch(TYPE_ISSUE.getMainType());
 
-    requestBuilder.setQuery(boolQuery().must(QueryBuilders.matchAllQuery()).filter(createBoolFilter(query)));
+    SearchSourceBuilder sourceBuilder = new SearchSourceBuilder()
+      // Avoids returning search hits
+      .size(0);
+    requestBuilder.source(sourceBuilder);
+
+    sourceBuilder.query(boolQuery().must(QueryBuilders.matchAllQuery()).filter(createBoolFilter(query)));
 
     TermsAggregationBuilder aggreg = AggregationBuilders.terms("_ref")
       .field(fieldName)
@@ -879,7 +916,9 @@ public class IssueIndex {
       aggreg.includeExclude(new IncludeExclude(format(SUBSTRING_MATCH_REGEXP, escapeSpecialRegexChars(textQuery)), null));
     }
 
-    SearchResponse searchResponse = requestBuilder.addAggregation(aggreg).get();
+    sourceBuilder.aggregation(aggreg);
+
+    SearchResponse searchResponse = client.search(requestBuilder);
     return searchResponse.getAggregations().get("_ref");
   }
 
@@ -897,18 +936,19 @@ public class IssueIndex {
     if (projectUuids.isEmpty()) {
       return Collections.emptyList();
     }
-    SearchRequestBuilder request = client.prepareSearch(TYPE_ISSUE.getMainType())
-      .setQuery(
+    SearchSourceBuilder sourceBuilder = new SearchSourceBuilder()
+      .query(
         boolQuery()
           .mustNot(existsQuery(FIELD_ISSUE_RESOLUTION))
           .filter(termQuery(FIELD_ISSUE_ASSIGNEE_UUID, assigneeUuid))
           .mustNot(termQuery(FIELD_ISSUE_TYPE, SECURITY_HOTSPOT.name())))
-      .setSize(0);
+      .size(0);
+
     IntStream.range(0, projectUuids.size()).forEach(i -> {
       String projectUuid = projectUuids.get(i);
       long from = froms.get(i);
-      request
-        .addAggregation(AggregationBuilders
+      sourceBuilder
+        .aggregation(AggregationBuilders
           .filter(projectUuid, boolQuery()
             .filter(termQuery(FIELD_ISSUE_PROJECT_UUID, projectUuid))
             .filter(rangeQuery(FIELD_ISSUE_FUNC_CREATED_AT).gte(epochMillisToEpochSeconds(from))))
@@ -919,16 +959,20 @@ public class IssueIndex {
               .subAggregation(
                 AggregationBuilders.max("maxFuncCreatedAt").field(FIELD_ISSUE_FUNC_CREATED_AT))));
     });
-    SearchResponse response = request.get();
+
+    SearchRequest requestBuilder = EsClient.prepareSearch(TYPE_ISSUE.getMainType());
+
+    requestBuilder.source(sourceBuilder);
+    SearchResponse response = client.search(requestBuilder);
     return response.getAggregations().asList().stream()
-      .map(x -> (InternalFilter) x)
-      .flatMap(projectBucket -> ((StringTerms) projectBucket.getAggregations().get("branchUuid")).getBuckets().stream()
+      .map(x -> (ParsedFilter) x)
+      .flatMap(projectBucket -> ((ParsedStringTerms) projectBucket.getAggregations().get("branchUuid")).getBuckets().stream()
         .flatMap(branchBucket -> {
-          long count = ((InternalValueCount) branchBucket.getAggregations().get(AGG_COUNT)).getValue();
+          long count = ((ParsedValueCount) branchBucket.getAggregations().get(AGG_COUNT)).getValue();
           if (count < 1L) {
             return Stream.empty();
           }
-          long lastIssueDate = (long) ((InternalMax) branchBucket.getAggregations().get("maxFuncCreatedAt")).getValue();
+          long lastIssueDate = (long) ((ParsedMax) branchBucket.getAggregations().get("maxFuncCreatedAt")).getValue();
           return Stream.of(new ProjectStatistics(branchBucket.getKeyAsString(), count, lastIssueDate));
         }))
       .collect(MoreCollectors.toList(projectUuids.size()));
@@ -939,32 +983,36 @@ public class IssueIndex {
       return Collections.emptyList();
     }
 
-    SearchRequestBuilder request = client.prepareSearch(TYPE_ISSUE.getMainType())
-      .setRouting(AuthorizationDoc.idOf(projectUuid))
-      .setQuery(
+    SearchSourceBuilder sourceBuilder = new SearchSourceBuilder()
+      .query(
         boolQuery()
           .must(termsQuery(FIELD_ISSUE_BRANCH_UUID, branchUuids))
           .mustNot(existsQuery(FIELD_ISSUE_RESOLUTION))
           .must(termQuery(FIELD_ISSUE_IS_MAIN_BRANCH, Boolean.toString(false))))
-      .setSize(0)
-      .addAggregation(AggregationBuilders.terms("branchUuids")
+      .size(0)
+      .aggregation(AggregationBuilders.terms("branchUuids")
         .field(FIELD_ISSUE_BRANCH_UUID)
         .size(branchUuids.size())
         .subAggregation(AggregationBuilders.terms("types")
           .field(FIELD_ISSUE_TYPE)));
-    SearchResponse response = request.get();
-    return ((StringTerms) response.getAggregations().get("branchUuids")).getBuckets().stream()
+
+    SearchRequest requestBuilder = EsClient.prepareSearch(TYPE_ISSUE.getMainType())
+      .routing(AuthorizationDoc.idOf(projectUuid));
+
+    requestBuilder.source(sourceBuilder);
+    SearchResponse response = client.search(requestBuilder);
+    return ((ParsedStringTerms) response.getAggregations().get("branchUuids")).getBuckets().stream()
       .map(bucket -> new PrStatistics(bucket.getKeyAsString(),
-        ((StringTerms) bucket.getAggregations().get("types")).getBuckets()
+        ((ParsedStringTerms) bucket.getAggregations().get("types")).getBuckets()
           .stream()
-          .collect(uniqueIndex(StringTerms.Bucket::getKeyAsString, InternalTerms.Bucket::getDocCount))))
+          .collect(uniqueIndex(MultiBucketsAggregation.Bucket::getKeyAsString, MultiBucketsAggregation.Bucket::getDocCount))))
       .collect(MoreCollectors.toList(branchUuids.size()));
   }
 
   public List<SecurityStandardCategoryStatistics> getSansTop25Report(String projectUuid, boolean isViewOrApp, boolean includeCwe) {
-    SearchRequestBuilder request = prepareNonClosedVulnerabilitiesAndHotspotSearch(projectUuid, isViewOrApp);
+    SearchSourceBuilder request = prepareNonClosedVulnerabilitiesAndHotspotSearch(projectUuid, isViewOrApp);
     Stream.of(SANS_TOP_25_INSECURE_INTERACTION, SANS_TOP_25_RISKY_RESOURCE, SANS_TOP_25_POROUS_DEFENSES)
-      .forEach(sansCategory -> request.addAggregation(newSecurityReportSubAggregations(
+      .forEach(sansCategory -> request.aggregation(newSecurityReportSubAggregations(
         AggregationBuilders.filter(sansCategory, boolQuery().filter(termQuery(FIELD_ISSUE_SANS_TOP_25, sansCategory))),
         includeCwe,
         Optional.ofNullable(SecurityStandards.CWES_BY_SANS_TOP_25.get(sansCategory)))));
@@ -972,9 +1020,9 @@ public class IssueIndex {
   }
 
   public List<SecurityStandardCategoryStatistics> getSonarSourceReport(String projectUuid, boolean isViewOrApp, boolean includeCwe) {
-    SearchRequestBuilder request = prepareNonClosedVulnerabilitiesAndHotspotSearch(projectUuid, isViewOrApp);
-    Arrays.stream(SecurityStandards.SQCategory.values())
-      .forEach(sonarsourceCategory -> request.addAggregation(
+    SearchSourceBuilder request = prepareNonClosedVulnerabilitiesAndHotspotSearch(projectUuid, isViewOrApp);
+    Arrays.stream(SQCategory.values())
+      .forEach(sonarsourceCategory -> request.aggregation(
         newSecurityReportSubAggregations(
           AggregationBuilders.filter(sonarsourceCategory.getKey(), boolQuery().filter(termQuery(FIELD_ISSUE_SQ_SECURITY_CATEGORY, sonarsourceCategory.getKey()))),
           includeCwe,
@@ -983,9 +1031,9 @@ public class IssueIndex {
   }
 
   public List<SecurityStandardCategoryStatistics> getOwaspTop10Report(String projectUuid, boolean isViewOrApp, boolean includeCwe) {
-    SearchRequestBuilder request = prepareNonClosedVulnerabilitiesAndHotspotSearch(projectUuid, isViewOrApp);
+    SearchSourceBuilder request = prepareNonClosedVulnerabilitiesAndHotspotSearch(projectUuid, isViewOrApp);
     IntStream.rangeClosed(1, 10).mapToObj(i -> "a" + i)
-      .forEach(owaspCategory -> request.addAggregation(
+      .forEach(owaspCategory -> request.aggregation(
         newSecurityReportSubAggregations(
           AggregationBuilders.filter(owaspCategory, boolQuery().filter(termQuery(FIELD_ISSUE_OWASP_TOP_10, owaspCategory))),
           includeCwe,
@@ -993,17 +1041,19 @@ public class IssueIndex {
     return processSecurityReportSearchResults(request, includeCwe);
   }
 
-  private static List<SecurityStandardCategoryStatistics> processSecurityReportSearchResults(SearchRequestBuilder request, boolean includeCwe) {
-    SearchResponse response = request.get();
+  private List<SecurityStandardCategoryStatistics> processSecurityReportSearchResults(SearchSourceBuilder sourceBuilder, boolean includeCwe) {
+    SearchRequest request = EsClient.prepareSearch(TYPE_ISSUE.getMainType())
+      .source(sourceBuilder);
+    SearchResponse response = client.search(request);
     return response.getAggregations().asList().stream()
-      .map(c -> processSecurityReportIssueSearchResults((InternalFilter) c, includeCwe))
+      .map(c -> processSecurityReportIssueSearchResults((ParsedFilter) c, includeCwe))
       .collect(MoreCollectors.toList());
   }
 
-  private static SecurityStandardCategoryStatistics processSecurityReportIssueSearchResults(InternalFilter categoryBucket, boolean includeCwe) {
+  private static SecurityStandardCategoryStatistics processSecurityReportIssueSearchResults(ParsedFilter categoryBucket, boolean includeCwe) {
     List<SecurityStandardCategoryStatistics> children = new ArrayList<>();
     if (includeCwe) {
-      Stream<StringTerms.Bucket> stream = ((StringTerms) categoryBucket.getAggregations().get(AGG_CWES)).getBuckets().stream();
+      Stream<? extends Terms.Bucket> stream = ((ParsedStringTerms) categoryBucket.getAggregations().get(AGG_CWES)).getBuckets().stream();
       children = stream.map(cweBucket -> processSecurityReportCategorySearchResults(cweBucket, cweBucket.getKeyAsString(), null)).collect(toList());
     }
 
@@ -1012,18 +1062,18 @@ public class IssueIndex {
 
   private static SecurityStandardCategoryStatistics processSecurityReportCategorySearchResults(HasAggregations categoryBucket, String categoryName,
     @Nullable List<SecurityStandardCategoryStatistics> children) {
-    List<StringTerms.Bucket> severityBuckets = ((StringTerms) ((InternalFilter) categoryBucket.getAggregations().get(AGG_VULNERABILITIES)).getAggregations().get(AGG_SEVERITIES))
-      .getBuckets();
-    long vulnerabilities = severityBuckets.stream().mapToLong(b -> ((InternalValueCount) b.getAggregations().get(AGG_COUNT)).getValue()).sum();
+    List<? extends Terms.Bucket> severityBuckets = ((ParsedStringTerms) ((ParsedFilter) categoryBucket.getAggregations().get(AGG_VULNERABILITIES)).getAggregations()
+      .get(AGG_SEVERITIES)).getBuckets();
+    long vulnerabilities = severityBuckets.stream().mapToLong(b -> ((ParsedValueCount) b.getAggregations().get(AGG_COUNT)).getValue()).sum();
     // Worst severity having at least one issue
     OptionalInt severityRating = severityBuckets.stream()
-      .filter(b -> ((InternalValueCount) b.getAggregations().get(AGG_COUNT)).getValue() != 0)
+      .filter(b -> ((ParsedValueCount) b.getAggregations().get(AGG_COUNT)).getValue() != 0)
       .mapToInt(b -> Severity.ALL.indexOf(b.getKeyAsString()) + 1)
       .max();
 
-    long toReviewSecurityHotspots = ((InternalValueCount) ((InternalFilter) categoryBucket.getAggregations().get(AGG_TO_REVIEW_SECURITY_HOTSPOTS)).getAggregations().get(AGG_COUNT))
+    long toReviewSecurityHotspots = ((ParsedValueCount) ((ParsedFilter) categoryBucket.getAggregations().get(AGG_TO_REVIEW_SECURITY_HOTSPOTS)).getAggregations().get(AGG_COUNT))
       .getValue();
-    long reviewedSecurityHotspots = ((InternalValueCount) ((InternalFilter) categoryBucket.getAggregations().get(AGG_REVIEWED_SECURITY_HOTSPOTS)).getAggregations().get(AGG_COUNT))
+    long reviewedSecurityHotspots = ((ParsedValueCount) ((ParsedFilter) categoryBucket.getAggregations().get(AGG_REVIEWED_SECURITY_HOTSPOTS)).getAggregations().get(AGG_COUNT))
       .getValue();
 
     Optional<Double> percent = computePercent(toReviewSecurityHotspots, reviewedSecurityHotspots);
@@ -1067,7 +1117,7 @@ public class IssueIndex {
           AggregationBuilders.count(AGG_COUNT).field(FIELD_ISSUE_KEY)));
   }
 
-  private SearchRequestBuilder prepareNonClosedVulnerabilitiesAndHotspotSearch(String projectUuid, boolean isViewOrApp) {
+  private static SearchSourceBuilder prepareNonClosedVulnerabilitiesAndHotspotSearch(String projectUuid, boolean isViewOrApp) {
     BoolQueryBuilder componentFilter = boolQuery();
     if (isViewOrApp) {
       IndexType.IndexMainType mainType = TYPE_VIEW;
@@ -1080,15 +1130,17 @@ public class IssueIndex {
     } else {
       componentFilter.filter(termQuery(FIELD_ISSUE_BRANCH_UUID, projectUuid));
     }
-    return client.prepareSearch(TYPE_ISSUE.getMainType())
-      .setQuery(
+
+    SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
+    return sourceBuilder
+      .query(
         componentFilter
           .should(NON_RESOLVED_VULNERABILITIES_FILTER)
           .should(TO_REVIEW_HOTSPOTS_FILTER)
           .should(IN_REVIEW_HOTSPOTS_FILTER)
           .should(REVIEWED_HOTSPOTS_FILTER)
           .minimumShouldMatch(1))
-      .setSize(0);
+      .size(0);
   }
 
 }

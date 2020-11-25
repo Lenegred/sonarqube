@@ -1,30 +1,41 @@
 ---
-title: Overview
+title: Pull Request Analysis
 url: /analysis/pull-request/
 ---
 
 _Pull Request analysis is available starting in [Developer Edition](https://redirect.sonarsource.com/editions/developer.html)._
 
-You can see your Pull Requests in SonarQube from the Branches and Pull Requests dropdown menu of your project.
+You can see your Pull Requests in SonarQube from the Branches and Pull Requests dropdown menu of your project.  
 
-Pull Request analysis allows you to see your Pull Request's Quality Gate and analysis in the SonarQube interface:
+Pull Request analysis shows your Pull Request's Quality Gate and analysis in the SonarQube interface. This analysis shows new issues introduced by the Pull Request before merging with the target branch:
 
 ![Pull Request Analysis.](/images/pranalysis.png)
 
-## Pull Request Decoration
-You can also add Pull Request decoration that shows the Pull Request analysis and Quality Gate directly in your ALM's interface. See [Decorating Pull Requests](/analysis/pr-decoration/) for more information on setting it up.
+## Prerequisites
 
-## Pull Request Quality Gate
+Before analyzing your Pull Requests, make sure the Pull Request branch is checked out. Avoid any attempt at previewing the merge or actions involving your main branch.
 
-A [Quality Gate](/user-guide/quality-gates/) lets you ensure you are meeting your organization's quality policy and that you can merge your Pull Request. The Pull Request Quality Gate:
+## Pull request decoration
+You can also add pull request decoration that shows the Pull Request analysis and Quality Gate directly in your ALM's interface. To set up pull request decoration, see the ALM integration page that corresponds with your ALM:
+- [GitHub Enterprise and GitHub.com](/analysis/github-integration/)
+- [GitLab Self-Managed and GitLab.com](/analysis/gitlab-integration/)
+- [Bitbucket Server](/analysis/bitbucket-integration/)
+- [Azure DevOps Server](/analysis/azuredevops-integration/)
+
+## Pull request Quality Gate
+
+A [Quality Gate](/user-guide/quality-gates/) lets you ensure you are meeting your organization's quality policy and that you can merge your pull request. The pull request uses your project Quality Gate as follows:
 * **Focuses on new code** – The Pull Request quality gate only uses your project's quality gate conditions that apply to "on New Code" metrics.
 * **Assigns a status** – Each Pull Request shows a quality gate status reflecting whether it Passed or Failed.
 
-Pull Request analyses on SonarQube are deleted automatically after 30 days with no analysis. This can be updated in **Administration > Configuration > General Settings > Housekeeping > Number of days before purging inactive branches**. 
+Pull request analyses on SonarQube are deleted automatically after 30 days with no analysis. This can be updated in **Administration > Configuration > General Settings > Housekeeping > Number of days before purging inactive branches**. 
 
-## Analysis Parameters
+## Analysis parameters
 
-These parameters enable PR analysis:
+The following parameters enable PR analysis.
+
+[[info]]
+| Scanners running on Jenkins with the Branch Source plugin configured, GitLab CI/CD, and Cirrus CI automatically detect these parameters, and you don't need to pass them manually.
 
 | Parameter Name        | Description |
 | --------------------- | ---------------------------------- |

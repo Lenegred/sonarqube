@@ -35,6 +35,10 @@ public class CeTaskMessageDto {
    */
   private String message;
   /**
+   * Type of the message
+   */
+  private CeTaskMessageType type;
+  /**
    * Timestamp the message was created. Not null
    */
   private long createdAt;
@@ -65,6 +69,15 @@ public class CeTaskMessageDto {
     checkArgument(message != null && !message.isEmpty(), "message can't be null nor empty");
     checkArgument(message.length() <= 4000, "message is too long: %s", message.length());
     this.message = message;
+    return this;
+  }
+
+  public CeTaskMessageType getType() {
+    return type;
+  }
+
+  public CeTaskMessageDto setType(CeTaskMessageType type) {
+    this.type = type;
     return this;
   }
 

@@ -24,28 +24,39 @@ import java.net.UnknownHostException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import javax.annotation.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.sonar.process.MessageException;
+import org.sonar.process.ProcessProperties;
 import org.sonar.process.Props;
 import org.sonar.process.System2;
 
 import static java.lang.String.valueOf;
 import static org.sonar.process.ProcessProperties.Property.CLUSTER_ENABLED;
+import static org.sonar.process.ProcessProperties.Property.CLUSTER_ES_HOSTS;
 import static org.sonar.process.ProcessProperties.Property.CLUSTER_NAME;
+import static org.sonar.process.ProcessProperties.Property.CLUSTER_NODE_ES_HOST;
+import static org.sonar.process.ProcessProperties.Property.CLUSTER_NODE_ES_PORT;
 import static org.sonar.process.ProcessProperties.Property.CLUSTER_NODE_NAME;
-import static org.sonar.process.ProcessProperties.Property.CLUSTER_SEARCH_HOSTS;
+import static org.sonar.process.ProcessProperties.Property.CLUSTER_NODE_SEARCH_HOST;
+import static org.sonar.process.ProcessProperties.Property.CLUSTER_NODE_SEARCH_PORT;
+import static org.sonar.process.ProcessProperties.Property.ES_PORT;
 import static org.sonar.process.ProcessProperties.Property.SEARCH_HOST;
-import static org.sonar.process.ProcessProperties.Property.SEARCH_HTTP_PORT;
 import static org.sonar.process.ProcessProperties.Property.SEARCH_INITIAL_STATE_TIMEOUT;
-import static org.sonar.process.ProcessProperties.Property.SEARCH_MINIMUM_MASTER_NODES;
 import static org.sonar.process.ProcessProperties.Property.SEARCH_PORT;
 
 public class EsSettings {
+  private static final String ES_HTTP_HOST_KEY = "http.host";
+  private static final String ES_HTTP_PORT_KEY = "http.port";
+  private static final String ES_TRANSPORT_HOST_KEY = "transport.host";
+  private static final String ES_TRANSPORT_PORT_KEY = "transport.port";
+  private static final String ES_NETWORK_HOST_KEY = "network.host";
 
   private static final Logger LOGGER = LoggerFactory.getLogger(EsSettings.class);
   private static final String STANDALONE_NODE_NAME = "sonarqube";
   private static final String SECCOMP_PROPERTY = "bootstrap.system_call_filter";
-  private static final String ALLOW_MMAP = "node.store.allow_mmapfs";
+  private static final String ALLOW_MMAP = "node.store.allow_mmap";
 
   private final Props props;
   private final EsInstallation fileSystem;
@@ -53,6 +64,7 @@ public class EsSettings {
   private final boolean clusterEnabled;
   private final String clusterName;
   private final String nodeName;
+  private final InetAddress loopbackAddress;
 
   public EsSettings(Props props, EsInstallation fileSystem, System2 system2) {
     this.props = props;
@@ -65,6 +77,7 @@ public class EsSettings {
     } else {
       this.nodeName = STANDALONE_NODE_NAME;
     }
+    this.loopbackAddress = InetAddress.getLoopbackAddress();
     String esJvmOptions = system2.getenv("ES_JVM_OPTIONS");
     if (esJvmOptions != null && !esJvmOptions.trim().isEmpty()) {
       LOGGER.warn("ES_JVM_OPTIONS is defined but will be ignored. " +
@@ -78,6 +91,9 @@ public class EsSettings {
     configureNetwork(builder);
     configureCluster(builder);
     configureOthers(builder);
+    LOGGER.info("Elasticsearch listening on [HTTP: {}:{}, TCP: {}:{}]",
+      builder.get(ES_HTTP_HOST_KEY), builder.get(ES_HTTP_PORT_KEY),
+      builder.get(ES_TRANSPORT_HOST_KEY), builder.get(ES_TRANSPORT_PORT_KEY));
     return builder;
   }
 
@@ -87,57 +103,77 @@ public class EsSettings {
   }
 
   private void configureNetwork(Map<String, String> builder) {
-    InetAddress host = readHost();
-    int port = Integer.parseInt(props.nonNullValue(SEARCH_PORT.getKey()));
-    LOGGER.info("Elasticsearch listening on {}:{}", host, port);
+    if (!clusterEnabled) {
+      InetAddress searchHost = resolveAddress(SEARCH_HOST);
+      int searchPort = Integer.parseInt(props.nonNullValue(SEARCH_PORT.getKey()));
+      builder.put(ES_HTTP_HOST_KEY, searchHost.getHostAddress());
+      builder.put(ES_HTTP_PORT_KEY, valueOf(searchPort));
+      builder.put(ES_NETWORK_HOST_KEY, searchHost.getHostAddress());
+      builder.put("discovery.seed_hosts", searchHost.getHostAddress());
+      builder.put("cluster.initial_master_nodes", searchHost.getHostAddress());
 
-    builder.put("transport.tcp.port", valueOf(port));
-    builder.put("transport.host", valueOf(host.getHostAddress()));
-    builder.put("network.host", valueOf(host.getHostAddress()));
+      int transportPort = Integer.parseInt(props.nonNullValue(ES_PORT.getKey()));
+
+      //we have no use of transport port in non-DCE editions
+      builder.put(ES_TRANSPORT_HOST_KEY, this.loopbackAddress.getHostAddress());
+      builder.put(ES_TRANSPORT_PORT_KEY, valueOf(transportPort));
+    }
+
+    // see https://github.com/lmenezes/elasticsearch-kopf/issues/195
+    builder.put("http.cors.enabled", valueOf(true));
+    builder.put("http.cors.allow-origin", "*");
 
     // Elasticsearch sets the default value of TCP reuse address to true only on non-MSWindows machines, but why ?
     builder.put("network.tcp.reuse_address", valueOf(true));
-
-    int httpPort = props.valueAsInt(SEARCH_HTTP_PORT.getKey(), -1);
-    if (httpPort < 0) {
-      // standard configuration
-      builder.put("http.enabled", valueOf(false));
-    } else {
-      LOGGER.warn("Elasticsearch HTTP connector is enabled on port {}. MUST NOT BE USED FOR PRODUCTION", httpPort);
-      // see https://github.com/lmenezes/elasticsearch-kopf/issues/195
-      builder.put("http.cors.enabled", valueOf(true));
-      builder.put("http.cors.allow-origin", "*");
-      builder.put("http.enabled", valueOf(true));
-      builder.put("http.host", host.getHostAddress());
-      builder.put("http.port", valueOf(httpPort));
-    }
   }
 
-  private InetAddress readHost() {
-    String hostProperty = props.nonNullValue(SEARCH_HOST.getKey());
+  private InetAddress resolveAddress(ProcessProperties.Property prop) {
+    return resolveAddress(prop, null);
+  }
+
+  private InetAddress resolveAddress(ProcessProperties.Property prop, @Nullable InetAddress defaultAddress) {
+    String address;
+    if (defaultAddress == null) {
+      address = props.nonNullValue(prop.getKey());
+    } else {
+      address = props.value(prop.getKey());
+      if (address == null) {
+        return defaultAddress;
+      }
+    }
+
     try {
-      return InetAddress.getByName(hostProperty);
+      return InetAddress.getByName(address);
     } catch (UnknownHostException e) {
-      throw new IllegalStateException("Can not resolve host [" + hostProperty + "]. Please check network settings and property " + SEARCH_HOST.getKey(), e);
+      throw new IllegalStateException("Can not resolve host [" + address + "]. Please check network settings and property " + prop.getKey(), e);
     }
   }
 
   private void configureCluster(Map<String, String> builder) {
     // Default value in a standalone mode, not overridable
 
-    int minimumMasterNodes = 1;
     String initialStateTimeOut = "30s";
 
     if (clusterEnabled) {
-      minimumMasterNodes = props.valueAsInt(SEARCH_MINIMUM_MASTER_NODES.getKey(), 2);
       initialStateTimeOut = props.value(SEARCH_INITIAL_STATE_TIMEOUT.getKey(), "120s");
 
-      String hosts = props.value(CLUSTER_SEARCH_HOSTS.getKey(), "");
+      String nodeSearchHost = resolveAddress(CLUSTER_NODE_SEARCH_HOST, loopbackAddress).getHostAddress();
+      int nodeSearchPort = props.valueAsInt(CLUSTER_NODE_SEARCH_PORT.getKey(), 9001);
+      builder.put(ES_HTTP_HOST_KEY, nodeSearchHost);
+      builder.put(ES_HTTP_PORT_KEY, valueOf(nodeSearchPort));
+
+      String nodeTransportHost = resolveAddress(CLUSTER_NODE_ES_HOST, loopbackAddress).getHostAddress();
+      int nodeTransportPort = props.valueAsInt(CLUSTER_NODE_ES_PORT.getKey(), 9002);
+      builder.put(ES_TRANSPORT_HOST_KEY, nodeTransportHost);
+      builder.put(ES_TRANSPORT_PORT_KEY, valueOf(nodeTransportPort));
+      builder.put(ES_NETWORK_HOST_KEY, nodeTransportHost);
+
+      String hosts = props.value(CLUSTER_ES_HOSTS.getKey(), loopbackAddress.getHostAddress());
       LOGGER.info("Elasticsearch cluster enabled. Connect to hosts [{}]", hosts);
-      builder.put("discovery.zen.ping.unicast.hosts", hosts);
+      builder.put("discovery.seed_hosts", hosts);
+      builder.put("cluster.initial_master_nodes", hosts);
     }
 
-    builder.put("discovery.zen.minimum_master_nodes", valueOf(minimumMasterNodes));
     builder.put("discovery.initial_state_timeout", initialStateTimeOut);
     builder.put("cluster.name", clusterName);
     builder.put("cluster.routing.allocation.awareness.attributes", "rack_id");
@@ -153,7 +189,10 @@ public class EsSettings {
       builder.put(SECCOMP_PROPERTY, "false");
     }
 
-    // to be used with HA QA, where we can't easily set mmap size when running with docker.
+    if (props.value("sonar.search.javaAdditionalOpts", "").contains("-Dnode.store.allow_mmapfs=false")) {
+      throw new MessageException("Property 'node.store.allow_mmapfs' is no longer supported. Use 'node.store.allow_mmap' instead.");
+    }
+
     if (props.value("sonar.search.javaAdditionalOpts", "").contains("-D" + ALLOW_MMAP + "=false")) {
       builder.put(ALLOW_MMAP, "false");
     }

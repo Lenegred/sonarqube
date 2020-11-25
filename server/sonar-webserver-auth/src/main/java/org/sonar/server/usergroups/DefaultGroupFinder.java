@@ -19,12 +19,10 @@
  */
 package org.sonar.server.usergroups;
 
+import org.sonar.api.security.DefaultGroups;
 import org.sonar.db.DbClient;
 import org.sonar.db.DbSession;
 import org.sonar.db.user.GroupDto;
-
-import static java.lang.String.format;
-import static java.util.Objects.requireNonNull;
 
 public class DefaultGroupFinder {
 
@@ -34,10 +32,9 @@ public class DefaultGroupFinder {
     this.dbClient = dbClient;
   }
 
-  public GroupDto findDefaultGroup(DbSession dbSession, String organizationUuid) {
-    String defaultGroupUuid = dbClient.organizationDao().getDefaultGroupUuid(dbSession, organizationUuid)
-      .orElseThrow(() -> new IllegalStateException(format("Default group cannot be found on organization '%s'", organizationUuid)));
-    return requireNonNull(dbClient.groupDao().selectByUuid(dbSession, defaultGroupUuid), format("Group '%s' cannot be found", defaultGroupUuid));
+  public GroupDto findDefaultGroup(DbSession dbSession) {
+    return dbClient.groupDao().selectByName(dbSession, DefaultGroups.USERS)
+      .orElseThrow(() -> new IllegalStateException("Default group cannot be found"));
   }
 
 }

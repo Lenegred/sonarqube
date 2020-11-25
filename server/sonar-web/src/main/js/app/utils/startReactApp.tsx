@@ -31,6 +31,7 @@ import { ThemeProvider } from 'sonar-ui-common/components/theme';
 import getHistory from 'sonar-ui-common/helpers/getHistory';
 import aboutRoutes from '../../apps/about/routes';
 import accountRoutes from '../../apps/account/routes';
+import applicationConsoleRoutes from '../../apps/application-console/routes';
 import backgroundTasksRoutes from '../../apps/background-tasks/routes';
 import codeRoutes from '../../apps/code/routes';
 import codingRulesRoutes from '../../apps/coding-rules/routes';
@@ -38,14 +39,10 @@ import componentMeasuresRoutes from '../../apps/component-measures/routes';
 import customMeasuresRoutes from '../../apps/custom-measures/routes';
 import customMetricsRoutes from '../../apps/custom-metrics/routes';
 import documentationRoutes from '../../apps/documentation/routes';
-import Explore from '../../apps/explore/Explore';
-import ExploreIssues from '../../apps/explore/ExploreIssues';
-import ExploreProjects from '../../apps/explore/ExploreProjects';
 import groupsRoutes from '../../apps/groups/routes';
 import Issues from '../../apps/issues/components/AppContainer';
 import { maintenanceRoutes, setupRoutes } from '../../apps/maintenance/routes';
 import marketplaceRoutes from '../../apps/marketplace/routes';
-import organizationsRoutes from '../../apps/organizations/routes';
 import overviewRoutes from '../../apps/overview/routes';
 import permissionTemplatesRoutes from '../../apps/permission-templates/routes';
 import { globalPermissionsRoutes, projectPermissionsRoutes } from '../../apps/permissions/routes';
@@ -204,6 +201,7 @@ function renderComponentRoutes() {
         <RouteWithChildRoutes path="project/branches" childRoutes={projectBranchesRoutes} />
         <RouteWithChildRoutes path="project/settings" childRoutes={settingsRoutes} />
         <RouteWithChildRoutes path="project_roles" childRoutes={projectPermissionsRoutes} />
+        <RouteWithChildRoutes path="application/console" childRoutes={applicationConsoleRoutes} />
         <RouteWithChildRoutes path="project/webhooks" childRoutes={webhooksRoutes} />
         <Route
           path="project/deletion"
@@ -292,10 +290,6 @@ export default function startReactApp(
                     <RouteWithChildRoutes path="account" childRoutes={accountRoutes} />
                     <RouteWithChildRoutes path="coding_rules" childRoutes={codingRulesRoutes} />
                     <RouteWithChildRoutes path="documentation" childRoutes={documentationRoutes} />
-                    <Route path="explore" component={Explore}>
-                      <Route path="issues" component={ExploreIssues} />
-                      <Route path="projects" component={ExploreProjects} />
-                    </Route>
                     <Route
                       path="extension/:pluginKey/:extensionKey"
                       component={lazyLoadComponent(() =>
@@ -306,7 +300,6 @@ export default function startReactApp(
                       path="issues"
                       component={withIndexationGuard(Issues, PageContext.Issues)}
                     />
-                    <RouteWithChildRoutes path="organizations" childRoutes={organizationsRoutes} />
                     <RouteWithChildRoutes path="projects" childRoutes={projectsRoutes} />
                     <RouteWithChildRoutes path="quality_gates" childRoutes={qualityGatesRoutes} />
                     <Route

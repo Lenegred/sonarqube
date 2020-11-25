@@ -18,23 +18,34 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 import * as React from 'react';
-import { translate } from 'sonar-ui-common/helpers/l10n';
 import { createAzureConfiguration, updateAzureConfiguration } from '../../../../api/alm-settings';
-import { AlmKeys, AzureBindingDefinition } from '../../../../types/alm-settings';
+import {
+  AlmKeys,
+  AlmSettingsBindingStatus,
+  AzureBindingDefinition
+} from '../../../../types/alm-settings';
 import AlmTab from './AlmTab';
 import AzureForm from './AzureForm';
 
 export interface AzureTabProps {
   definitions: AzureBindingDefinition[];
+  definitionStatus: T.Dict<AlmSettingsBindingStatus>;
   loadingAlmDefinitions: boolean;
   loadingProjectCount: boolean;
   multipleAlmEnabled: boolean;
+  onCheck: (definitionKey: string) => void;
   onDelete: (definitionKey: string) => void;
   onUpdateDefinitions: () => void;
 }
 
 export default function AzureTab(props: AzureTabProps) {
-  const { multipleAlmEnabled, definitions, loadingAlmDefinitions, loadingProjectCount } = props;
+  const {
+    multipleAlmEnabled,
+    definitions,
+    definitionStatus,
+    loadingAlmDefinitions,
+    loadingProjectCount
+  } = props;
 
   return (
     <div className="bordered">
@@ -43,18 +54,12 @@ export default function AzureTab(props: AzureTabProps) {
         createConfiguration={createAzureConfiguration}
         defaultBinding={{ key: '', personalAccessToken: '' }}
         definitions={definitions}
-        features={[
-          {
-            name: translate('settings.almintegration.feature.pr_decoration.title'),
-            active: definitions.length > 0,
-            description: translate('settings.almintegration.feature.pr_decoration.description'),
-            inactiveReason: translate('settings.almintegration.feature.need_at_least_1_binding')
-          }
-        ]}
+        definitionStatus={definitionStatus}
         form={childProps => <AzureForm {...childProps} />}
         loadingAlmDefinitions={loadingAlmDefinitions}
         loadingProjectCount={loadingProjectCount}
         multipleAlmEnabled={multipleAlmEnabled}
+        onCheck={props.onCheck}
         onDelete={props.onDelete}
         onUpdateDefinitions={props.onUpdateDefinitions}
         updateConfiguration={updateAzureConfiguration}

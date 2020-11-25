@@ -23,6 +23,7 @@ import java.util.Arrays;
 import java.util.List;
 import org.sonar.ce.task.container.TaskContainer;
 import org.sonar.ce.task.projectanalysis.filemove.FileMoveDetectionStep;
+import org.sonar.ce.task.projectanalysis.language.HandleUnanalyzedLanguagesStep;
 import org.sonar.ce.task.projectanalysis.measure.PostMeasuresComputationChecksStep;
 import org.sonar.ce.task.projectanalysis.purge.PurgeDatastoresStep;
 import org.sonar.ce.task.projectanalysis.qualityprofile.RegisterQualityProfileStatusStep;
@@ -39,7 +40,6 @@ public class ReportComputationSteps extends AbstractComputationSteps {
     ExtractReportStep.class,
     PersistScannerContextStep.class,
     PersistAnalysisWarningsStep.class,
-    DbMigrationsStep.class,
     GenerateAnalysisUuid.class,
 
     // Builds Component tree
@@ -86,6 +86,8 @@ public class ReportComputationSteps extends AbstractComputationSteps {
 
     // Must be executed after computation of quality gate measure
     QualityGateEventsStep.class,
+
+    HandleUnanalyzedLanguagesStep.class,
 
     // Persist data
     PersistComponentsStep.class,

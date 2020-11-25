@@ -21,7 +21,6 @@ exports[`should render correctly: built-in profile 1`] = `
         <ProfileLink
           language="js"
           name="name"
-          organization={null}
         >
           name
         </ProfileLink>
@@ -87,12 +86,12 @@ exports[`should render correctly: built-in profile 1`] = `
   <td
     className="quality-profiles-table-date thin nowrap text-middle text-right"
   >
-    <ProfileDate />
+    <DateFromNow />
   </td>
   <td
     className="quality-profiles-table-date thin nowrap text-middle text-right"
   >
-    <ProfileDate />
+    <DateFromNow />
   </td>
   <td
     className="quality-profiles-table-actions thin nowrap text-middle text-right"
@@ -144,7 +143,6 @@ exports[`should render correctly: default 1`] = `
         <ProfileLink
           language="js"
           name="name"
-          organization={null}
         >
           name
         </ProfileLink>
@@ -182,12 +180,12 @@ exports[`should render correctly: default 1`] = `
   <td
     className="quality-profiles-table-date thin nowrap text-middle text-right"
   >
-    <ProfileDate />
+    <DateFromNow />
   </td>
   <td
     className="quality-profiles-table-date thin nowrap text-middle text-right"
   >
-    <ProfileDate />
+    <DateFromNow />
   </td>
   <td
     className="quality-profiles-table-actions thin nowrap text-middle text-right"
@@ -239,7 +237,6 @@ exports[`should render correctly: default profile 1`] = `
         <ProfileLink
           language="js"
           name="name"
-          organization={null}
         >
           name
         </ProfileLink>
@@ -249,15 +246,15 @@ exports[`should render correctly: default profile 1`] = `
   <td
     className="quality-profiles-table-projects thin nowrap text-middle text-right"
   >
-    <DocTooltip
-      doc={Promise {}}
+    <Tooltip
+      overlay="quality_profiles.list.default.help"
     >
       <span
         className="badge"
       >
         default
       </span>
-    </DocTooltip>
+    </Tooltip>
   </td>
   <td
     className="quality-profiles-table-rules thin nowrap text-middle text-right"
@@ -308,12 +305,12 @@ exports[`should render correctly: default profile 1`] = `
   <td
     className="quality-profiles-table-date thin nowrap text-middle text-right"
   >
-    <ProfileDate />
+    <DateFromNow />
   </td>
   <td
     className="quality-profiles-table-date thin nowrap text-middle text-right"
   >
-    <ProfileDate />
+    <DateFromNow />
   </td>
   <td
     className="quality-profiles-table-actions thin nowrap text-middle text-right"
@@ -365,7 +362,6 @@ exports[`should render correctly: with deprecated rules 1`] = `
         <ProfileLink
           language="js"
           name="name"
-          organization={null}
         >
           name
         </ProfileLink>
@@ -428,12 +424,12 @@ exports[`should render correctly: with deprecated rules 1`] = `
   <td
     className="quality-profiles-table-date thin nowrap text-middle text-right"
   >
-    <ProfileDate />
+    <DateFromNow />
   </td>
   <td
     className="quality-profiles-table-date thin nowrap text-middle text-right"
   >
-    <ProfileDate />
+    <DateFromNow />
   </td>
   <td
     className="quality-profiles-table-actions thin nowrap text-middle text-right"

@@ -49,7 +49,7 @@ import static java.lang.String.format;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.sonar.api.measures.Metric.ValueType.INT;
-import static org.sonar.db.permission.OrganizationPermission.ADMINISTER_QUALITY_GATES;
+import static org.sonar.db.permission.GlobalPermission.ADMINISTER_QUALITY_GATES;
 import static org.sonar.server.qualitygate.ws.QualityGatesWsParameters.PARAM_ERROR;
 import static org.sonar.server.qualitygate.ws.QualityGatesWsParameters.PARAM_GATE_ID;
 import static org.sonar.server.qualitygate.ws.QualityGatesWsParameters.PARAM_METRIC;
@@ -264,7 +264,7 @@ public class CreateConditionActionTest {
   }
 
   private void logInAsQualityGateAdmin(OrganizationDto organization) {
-    userSession.logIn().addPermission(ADMINISTER_QUALITY_GATES, organization);
+    userSession.logIn().addPermission(ADMINISTER_QUALITY_GATES);
   }
 
   private MetricDto insertMetric() {

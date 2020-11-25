@@ -24,7 +24,6 @@ import { getBranches, getPullRequests } from '../../api/branches';
 import { getAnalysisStatus, getTasksForComponent } from '../../api/ce';
 import { getComponentData } from '../../api/components';
 import { getComponentNavigation } from '../../api/nav';
-import { STATUSES } from '../../apps/background-tasks/constants';
 import { Location, Router, withRouter } from '../../components/hoc/withRouter';
 import {
   getBranchLikeQuery,
@@ -40,6 +39,7 @@ import {
 } from '../../store/rootActions';
 import { BranchLike } from '../../types/branch-like';
 import { isPortfolioLike } from '../../types/component';
+import { Task, TaskStatuses, TaskWarning } from '../../types/tasks';
 import ComponentContainerNotFound from './ComponentContainerNotFound';
 import { ComponentContext } from './ComponentContext';
 import PageUnavailableDueToIndexation from './indexation/PageUnavailableDueToIndexation';
@@ -58,11 +58,11 @@ interface State {
   branchLike?: BranchLike;
   branchLikes: BranchLike[];
   component?: T.Component;
-  currentTask?: T.Task;
+  currentTask?: Task;
   isPending: boolean;
   loading: boolean;
-  tasksInProgress?: T.Task[];
-  warnings: string[];
+  tasksInProgress?: Task[];
+  warnings: TaskWarning[];
 }
 
 const FETCH_STATUS_WAIT_TIME = 3000;
@@ -189,7 +189,7 @@ export class ComponentContainer extends React.PureComponent<Props, State> {
               const newCurrentTask = this.getCurrentTask(current, branchLike);
               const pendingTasks = this.getPendingTasks(queue, branchLike);
               const newTasksInProgress = pendingTasks.filter(
-                task => task.status === STATUSES.IN_PROGRESS
+                task => task.status === TaskStatuses.InProgress
               );
 
               const currentTaskChanged =
@@ -214,7 +214,7 @@ export class ComponentContainer extends React.PureComponent<Props, State> {
                 );
               }
 
-              const isPending = pendingTasks.some(task => task.status === STATUSES.PENDING);
+              const isPending = pendingTasks.some(task => task.status === TaskStatuses.Pending);
               return {
                 currentTask: newCurrentTask,
                 isPending,
@@ -254,22 +254,25 @@ export class ComponentContainer extends React.PureComponent<Props, State> {
       : branchLikes.find(b => isBranch(b) && (query.branch ? b.name === query.branch : b.isMain));
   };
 
-  getCurrentTask = (current: T.Task, branchLike?: BranchLike) => {
+  getCurrentTask = (current: Task, branchLike?: BranchLike) => {
     if (!current) {
       return undefined;
     }
 
-    return current.status === STATUSES.FAILED || this.isSameBranch(current, branchLike)
+    return current.status === TaskStatuses.Failed || this.isSameBranch(current, branchLike)
       ? current
       : undefined;
   };
 
-  getPendingTasks = (pendingTasks: T.Task[], branchLike?: BranchLike) => {
+  getPendingTasks = (pendingTasks: Task[], branchLike?: BranchLike) => {
     return pendingTasks.filter(task => this.isSameBranch(task, branchLike));
   };
 
-  isSameBranch = (task: Pick<T.Task, 'branch' | 'pullRequest'>, branchLike?: BranchLike) => {
-    if (branchLike && !isMainBranch(branchLike)) {
+  isSameBranch = (task: Pick<Task, 'branch' | 'pullRequest'>, branchLike?: BranchLike) => {
+    if (branchLike) {
+      if (isMainBranch(branchLike)) {
+        return (!task.pullRequest && !task.branch) || branchLike.name === task.branch;
+      }
       if (isPullRequest(branchLike)) {
         return branchLike.key === task.pullRequest;
       }
@@ -317,6 +320,13 @@ export class ComponentContainer extends React.PureComponent<Props, State> {
     }
   };
 
+  handleWarningDismiss = () => {
+    const { component } = this.state;
+    if (component !== undefined) {
+      this.fetchWarnings(component);
+    }
+  };
+
   render() {
     const { component, loading } = this.state;
 
@@ -343,6 +353,7 @@ export class ComponentContainer extends React.PureComponent<Props, State> {
             isInProgress={isInProgress}
             isPending={isPending}
             onComponentChange={this.handleComponentChange}
+            onWarningDismiss={this.handleWarningDismiss}
             warnings={this.state.warnings}
           />
         )}

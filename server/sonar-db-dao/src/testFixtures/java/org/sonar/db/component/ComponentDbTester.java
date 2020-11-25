@@ -82,6 +82,10 @@ public class ComponentDbTester {
     return insertComponentAndBranchAndProject(componentDto, false);
   }
 
+  public ComponentDto insertPrivateProject(String uuid) {
+    return insertComponentAndBranchAndProject(ComponentTesting.newPrivateProjectDto(db.getDefaultOrganization(), uuid), true);
+  }
+
   public final ComponentDto insertPrivateProject(Consumer<ComponentDto> dtoPopulator) {
     return insertComponentAndBranchAndProject(ComponentTesting.newPrivateProjectDto(db.getDefaultOrganization()), true, defaults(),
       dtoPopulator);
@@ -139,6 +143,12 @@ public class ComponentDbTester {
     ComponentDto componentDto = insertPublicProject(organization);
     return getProjectDto(componentDto);
   }
+
+  public ProjectDto insertPublicProjectDto(Consumer<ComponentDto> dtoPopulator) {
+    ComponentDto componentDto = insertPublicProject(dtoPopulator);
+    return getProjectDto(componentDto);
+  }
+
 
   public final ProjectDto insertPublicProjectDto(OrganizationDto organization, Consumer<ComponentDto> dtoPopulator) {
     ComponentDto componentDto = insertPublicProject(organization, dtoPopulator);

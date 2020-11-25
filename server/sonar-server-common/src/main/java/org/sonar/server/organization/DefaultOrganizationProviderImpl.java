@@ -20,8 +20,6 @@
 package org.sonar.server.organization;
 
 import java.util.Optional;
-import java.util.function.Supplier;
-import javax.annotation.CheckForNull;
 import org.sonar.db.DbClient;
 import org.sonar.db.DbSession;
 import org.sonar.db.organization.OrganizationDto;
@@ -29,10 +27,9 @@ import org.sonar.server.property.InternalProperties;
 
 import static com.google.common.base.Preconditions.checkState;
 
-public class DefaultOrganizationProviderImpl implements DefaultOrganizationProvider, DefaultOrganizationCache {
-  private static final ThreadLocal<Cache> CACHE = new ThreadLocal<>();
-
+public class DefaultOrganizationProviderImpl implements DefaultOrganizationProvider {
   private final DbClient dbClient;
+  private DefaultOrganization cache;
 
   public DefaultOrganizationProviderImpl(DbClient dbClient) {
     this.dbClient = dbClient;
@@ -40,15 +37,14 @@ public class DefaultOrganizationProviderImpl implements DefaultOrganizationProvi
 
   @Override
   public DefaultOrganization get() {
-    Cache cache = CACHE.get();
-    if (cache != null) {
-      return cache.get(() -> getDefaultOrganization(dbClient));
+    if (cache == null) {
+      cache = getDefaultOrganization(dbClient);
     }
 
-    return getDefaultOrganization(dbClient);
+    return cache;
   }
 
-  private static DefaultOrganization getDefaultOrganization(DbClient dbClient) {
+  public static DefaultOrganization getDefaultOrganization(DbClient dbClient) {
     try (DbSession dbSession = dbClient.openSession(false)) {
       Optional<String> uuid = dbClient.internalPropertiesDao().selectByKey(dbSession, InternalProperties.DEFAULT_ORGANIZATION);
       checkState(uuid.isPresent() && !uuid.get().isEmpty(), "No Default organization uuid configured");
@@ -66,28 +62,5 @@ public class DefaultOrganizationProviderImpl implements DefaultOrganizationProvi
       .setCreatedAt(organizationDto.getCreatedAt())
       .setUpdatedAt(organizationDto.getUpdatedAt())
       .build();
-  }
-
-  @Override
-  public void load() {
-    CACHE.set(new Cache());
-  }
-
-  @Override
-  public void unload() {
-    CACHE.remove();
-  }
-
-  private static final class Cache {
-    @CheckForNull
-    private DefaultOrganization defaultOrganization;
-
-    public DefaultOrganization get(Supplier<DefaultOrganization> supplier) {
-      if (defaultOrganization == null) {
-        defaultOrganization = supplier.get();
-      }
-      return defaultOrganization;
-    }
-
   }
 }

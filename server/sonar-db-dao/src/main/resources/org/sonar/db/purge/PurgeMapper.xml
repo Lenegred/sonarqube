@@ -51,10 +51,15 @@
       pb.uuid
     from
       project_branches pb
+    left join snapshots s
+    on
+        s.component_uuid = pb.uuid
+        and s.islast=${_true}
     where
         pb.project_uuid=#{projectUuid,jdbcType=VARCHAR}
         and pb.exclude_from_purge = ${_false}
-        and pb.updated_at &lt; #{toDate}
+        and (s.created_at is null or s.created_at &lt; #{toDate})
+
   </select>
 
   <select id="selectRootAndModulesOrSubviewsByProjectUuid" resultType="String" parameterType="String">
@@ -218,6 +223,12 @@
       project_uuid = #{rootUuid,jdbcType=VARCHAR}
   </delete>
 
+    <delete id="deleteComponentsByMainBranchProjectUuid" parameterType="map">
+    delete from components
+    where
+      main_branch_project_uuid = #{uuid,jdbcType=VARCHAR}
+  </delete>
+
   <delete id="deleteProjectsByProjectUuid" parameterType="map">
     delete from projects
     where
@@ -265,18 +276,7 @@
   </delete>
 
   <delete id="deleteIssueChangesByProjectUuid" parameterType="map">
-    delete from issue_changes ic
-    where
-      exists (select 1 from issues i where i.kee=ic.issue_key and i.project_uuid = #{projectUuid,jdbcType=VARCHAR})
-  </delete>
-
-  <!-- Mssql -->
-  <delete id="deleteIssueChangesByProjectUuid" databaseId="mssql" parameterType="map">
-    delete issue_changes from issue_changes
-    inner join issues on
-      issue_changes.issue_key=issues.kee
-    where
-      issues.project_uuid = #{projectUuid,jdbcType=VARCHAR}
+    delete from issue_changes where project_uuid = #{projectUuid,jdbcType=VARCHAR}
   </delete>
 
   <delete id="deleteIssuesByProjectUuid" parameterType="map">
@@ -489,8 +489,8 @@
     delete from project_mappings where project_uuid=#{projectUuid,jdbcType=VARCHAR}
   </delete>
 
-  <delete id="deleteProjectAlmBindingsByProjectUuid">
-    delete from project_alm_bindings where project_uuid=#{projectUuid,jdbcType=VARCHAR}
+  <delete id="deleteProjectAlmSettingsByProjectUuid">
+    delete from project_alm_settings where project_uuid=#{projectUuid,jdbcType=VARCHAR}
   </delete>
 
   <delete id="deleteBranchByUuid">
@@ -503,6 +503,10 @@
 
   <delete id="deleteLiveMeasuresByComponentUuids">
     delete from live_measures where component_uuid in <foreach item="componentUuid" index="index" collection="componentUuids" open="(" separator="," close=")">#{componentUuid, jdbcType=VARCHAR}</foreach>
+  </delete>
+
+  <delete id="deleteUserDismissedMessagesByProjectUuid">
+    delete from user_dismissed_messages where project_uuid = #{projectUuid,jdbcType=VARCHAR}
   </delete>
 </mapper>
 

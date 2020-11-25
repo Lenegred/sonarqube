@@ -22,7 +22,7 @@ For additional requirements and recommendations relating to database and Elastic
 ### Java
 SonarQube scanners require version 8 or 11 of the JVM and the SonarQube server requires version 11. Versions beyond Java 11 are not officially supported. 
 
-The SonarQube Java analyzer is able to analyze any kind of Java source files regardless of the version of Java they comply to. 
+SonarQube is able to analyze any kind of Java source files regardless of the version of Java they comply to. 
 
 We recommend using the Critical Patch Update (CPU) releases.
 
@@ -43,7 +43,7 @@ We recommend using the Critical Patch Update (CPU) releases.
 | [Microsoft SQL Server](http://www.microsoft.com/sqlserver/) | ![](/images/check.svg) 2017 (MSSQL Server 14.0) with bundled Microsoft JDBC driver. Express Edition is supported.                                                                                                                                                 |
 |                                                             | ![](/images/check.svg) 2016 (MSSQL Server 13.0) with bundled Microsoft JDBC driver. Express Edition is supported.                                                                                                                                                 |
 |                                                             | ![](/images/check.svg) 2014 (MSSQL Server 12.0) with bundled Microsoft JDBC driver. Express Edition is supported.                                                                                                                                                 |
-|                                                             | ![](/images/exclamation.svg) Collation must be case-sensitive (CS) and accent-sensitive (AS) (example: Latin1_General_CS_AS)                                                                                                                                      |
+|                                                             | ![](/images/exclamation.svg) Collation must be case-sensitive (CS) and accent-sensitive (AS) (example: `Latin1_General_CS_AS`)                                                                                                                                      |
 |                                                             | ![](/images/exclamation.svg) `READ_COMMITTED_SNAPSHOT` must be set on the SonarQube database to avoid potential deadlocks under heavy load                                                                                                                          |
 |                                                             | ![](/images/info.svg) Both Windows authentication (“Integrated Security”) and SQL Server authentication are supported. See the Microsoft SQL Server section in Installing/installation/installing-the-server page for instructions on configuring authentication. |
 | [Oracle](http://www.oracle.com/database/)                   | ![](/images/check.svg) 19C                                                                                                                                                                                                                                        |
@@ -51,7 +51,7 @@ We recommend using the Critical Patch Update (CPU) releases.
 |                                                             | ![](/images/check.svg) 12C                                                                                                                                                                                                                                        |
 |                                                             | ![](/images/check.svg) 11G                                                                                                                                                                                                                                        |
 |                                                             | ![](/images/check.svg) XE Editions                                                                                                                                                                                                                                |
-|                                                             | ![](/images/exclamation.svg) Must be configured to use a UTF8-family charset (see NLS_CHARACTERSET)                                                                                                                                                               |
+|                                                             | ![](/images/exclamation.svg) Must be configured to use a UTF8-family charset (see `NLS_CHARACTERSET`)                                                                                                                                                               |
 |                                                             | ![](/images/exclamation.svg) The driver ojdbc14.jar is not supported                                                                                                                                                                                              |
 |                                                             | ![](/images/info.svg) We recommend using the latest Oracle JDBC driver                                                                                                                                                                                            |
 |                                                             | ![](/images/exclamation.svg) Only the thin mode is supported, not OCI                                                                                                                                                                                             |
@@ -77,7 +77,7 @@ The [SonarScanner for Azure Devops](/analysis/scan/sonarscanner-for-azure-devops
 To add Pull Request analysis to Code Insights in Bitbucket Server, you must be running Bitbucket Server version 5.15+.
 
 ### GitHub Enterprise and GitHub.com
-To add Pull Request analysis to Checks in GitHub Enterprise, you must be running GitHub Enterprise version 2.14+.
+To add Pull Request analysis to Checks in GitHub Enterprise, you must be running GitHub Enterprise version 2.15+.
 
 GitHub.com is also supported.
 

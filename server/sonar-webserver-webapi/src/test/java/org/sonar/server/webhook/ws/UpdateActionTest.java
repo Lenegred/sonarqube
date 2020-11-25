@@ -49,7 +49,7 @@ import static org.junit.rules.ExpectedException.none;
 import static org.mockito.Mockito.mock;
 import static org.sonar.api.web.UserRole.ADMIN;
 import static org.sonar.db.DbTester.create;
-import static org.sonar.db.permission.OrganizationPermission.ADMINISTER;
+import static org.sonar.db.permission.GlobalPermission.ADMINISTER;
 import static org.sonar.server.organization.TestDefaultOrganizationProvider.from;
 import static org.sonar.server.tester.UserSessionRule.standalone;
 import static org.sonar.server.ws.KeyExamples.NAME_WEBHOOK_EXAMPLE_001;
@@ -141,7 +141,7 @@ public class UpdateActionTest {
   public void update_an_organization_webhook() {
     OrganizationDto organization = organizationDbTester.insert();
     WebhookDto dto = webhookDbTester.insertWebhook(organization);
-    userSession.logIn().addPermission(ADMINISTER, organization.getUuid());
+    userSession.logIn().addPermission(ADMINISTER);
 
     TestResponse response = wsActionTester.newRequest()
       .setParam("webhook", dto.getUuid())
@@ -162,7 +162,7 @@ public class UpdateActionTest {
 
   @Test
   public void fail_if_webhook_does_not_exist() {
-    userSession.logIn().addPermission(ADMINISTER, defaultOrganizationProvider.get().getUuid());
+    userSession.logIn().addPermission(ADMINISTER);
 
     expectedException.expect(NotFoundException.class);
     expectedException.expectMessage("No webhook with key 'inexistent-webhook-uuid'");

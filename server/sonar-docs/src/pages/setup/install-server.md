@@ -3,7 +3,34 @@ title: Install the Server
 url: /setup/install-server/
 ---
 
-## Installing the Database
+## Overview
+
+This section describes a single-node SonarQube instance. For details on clustered setup, see [Install the Server as a Cluster](/setup/install-cluster/).
+
+### Instance components
+
+A SonarQube instance comprises three components:
+
+![SonarQube Instance Components](/images/SQ-instance-components.png)
+
+1. The SonarQube server running the following processes:
+	- a web server that serves the SonarQube user interface.
+	- a search server based on Elasticsearch.
+	- the compute engine in charge of processing code analysis reports and saving them in the SonarQube database.
+
+2. The database to store the following:
+	- Metrics and issues for code quality and security generated during code scans.
+	- The SonarQube instance configuration.
+
+3. One or more scanners running on your build or continuous integration servers to analyze projects.
+
+### Hosts and locations
+
+For optimal performance, the SonarQube server and database should be installed on separate hosts, and the server host should be dedicated. The server and database hosts should be located in the same network.
+
+All hosts must be time-synchronized.
+
+## Installing the database
 
 Several [database engines](/requirements/requirements/) are supported. Be sure to follow the requirements listed for your database. They are real requirements not recommendations.
 
@@ -122,7 +149,8 @@ sonar.web.context=/sonarqube
 
 Execute the following script to start the server:
 
-- On Linux/Mac OS: bin/<YOUR OS>/sonar.sh start
+- On Linux: bin/linux-x86-64/sonar.sh start
+- On macOS: bin/macosx-universal-64/sonar.sh start
 - On Windows: bin/windows-x86-64/StartSonar.bat
 
 You can now browse SonarQube at _http://localhost:9000_ (the default System administrator credentials are `admin`/`admin`).
@@ -154,16 +182,16 @@ Follow these steps for your first installation:
 1.	Creating the following volumes helps prevent the loss of information when updating to a new version or upgrading to a higher edition:
 	- `sonarqube_data` – contains data files, such as the embedded H2 database and Elasticsearch indexes
 	- `sonarqube_logs` – contains SonarQube logs about access, web process, CE process, and Elasticsearch
-	- `sonarqube_extensions` – contains plugins, such as language analyzers 
+	- `sonarqube_extensions` – will contain any plugins you install and the Oracle JDBC driver if necessary.
 	
 	Create the volumes with the following commands:
 	```bash
 	$> docker volume create --name sonarqube_data
-	$> docker volume create --name sonarqube_extensions
 	$> docker volume create --name sonarqube_logs
+	$> docker volume create --name sonarqube_extensions
 	``` 
 	[[warning]]
-    | Make sure you're using [volumes](https://docs.docker.com/storage/volumes/) as shown with the above commands, and not [bind mounts](https://docs.docker.com/storage/bind-mounts/). Using bind mounts prevents plugins and languages from populating correctly.
+    | Make sure you're using [volumes](https://docs.docker.com/storage/volumes/) as shown with the above commands, and not [bind mounts](https://docs.docker.com/storage/bind-mounts/). Using bind mounts prevents plugins from populating correctly.
 
 2. Drivers for supported databases (except Oracle) are already provided. If you're using an Oracle database, you need to add the JDBC driver to the `sonar_extensions` volume. To do this:
 
@@ -178,7 +206,7 @@ Follow these steps for your first installation:
 	
 	b. Exit once SonarQube has started properly. 
    
-	c. Copy the Oracle driver into `sonarqube_extensions/jdbc-driver/oracle`.
+	c. Copy the Oracle JDBC driver into `sonarqube_extensions/jdbc-driver/oracle`.
    
 3. Run the image with your database properties defined using the -e environment variable flag:
 
@@ -198,6 +226,49 @@ Follow these steps for your first installation:
 	
 	[[warning]]
     | Use of the environment variables `SONARQUBE_JDBC_USERNAME`, `SONARQUBE_JDBC_PASSWORD`, and `SONARQUBE_JDBC_URL` is deprecated and will stop working in future releases.
+
+####**Example Docker Compose configuration**
+If you're using [Docker Compose](https://docs.docker.com/compose/), use the following example as a reference when configuring your `.yml` file. Click the heading below to expand the `.yml` file.
+
+[[collapse]]
+| ## Docker Compose .yml file example
+|
+| ```
+| version: "3"
+| 
+| services:
+|   sonarqube:
+|     image: sonarqube:8-community
+|     depends_on:
+|       - db
+|     environment:
+|       SONAR_JDBC_URL: jdbc:postgresql://db:5432/sonar
+|       SONAR_JDBC_USERNAME: sonar
+|       SONAR_JDBC_PASSWORD: sonar
+|     volumes:
+|       - sonarqube_data:/opt/sonarqube/data
+|       - sonarqube_extensions:/opt/sonarqube/extensions
+|       - sonarqube_logs:/opt/sonarqube/logs
+|       - sonarqube_temp:/opt/sonarqube/temp
+|     ports:
+|       - "9000:9000"
+|   db:
+|     image: postgres:12
+|     environment:
+|       POSTGRES_USER: sonar
+|       POSTGRES_PASSWORD: sonar
+|     volumes:
+|       - postgresql:/var/lib/postgresql
+|       - postgresql_data:/var/lib/postgresql/data
+| 
+| volumes:
+|   sonarqube_data:
+|   sonarqube_extensions:
+|   sonarqube_logs:
+|   sonarqube_temp:
+|   postgresql:
+|   postgresql_data:
+| ```
 
 ### SonarQube 7.9.x LTS
 

@@ -212,7 +212,6 @@ declare namespace T {
   export interface CurrentUser {
     isLoggedIn: boolean;
     permissions?: { global: string[] };
-    showOnboardingTutorial?: boolean;
   }
 
   export interface CurrentUserSetting {
@@ -452,7 +451,7 @@ declare namespace T {
 
   interface MeasureIntern {
     bestValue?: boolean;
-    periods?: PeriodMeasure[];
+    period?: PeriodMeasure;
     value?: string;
   }
 
@@ -824,12 +823,6 @@ declare namespace T {
 
   export type StandardSecurityCategories = T.Dict<{ title: string; description?: string }>;
 
-  export type Standards = {
-    [key in StandardType]: T.Dict<{ title: string; description?: string }>;
-  };
-
-  export type StandardType = 'owaspTop10' | 'sansTop25' | 'cwe' | 'sonarsourceSecurity';
-
   export type Status = 'ERROR' | 'OK';
 
   export interface SubscriptionPlan {
@@ -916,34 +909,6 @@ declare namespace T {
     | 'RESTARTING'
     | 'DB_MIGRATION_NEEDED'
     | 'DB_MIGRATION_RUNNING';
-
-  export interface Task {
-    analysisId?: string;
-    branch?: string;
-    componentKey?: string;
-    componentName?: string;
-    componentQualifier?: string;
-    errorMessage?: string;
-    errorStacktrace?: string;
-    errorType?: string;
-    executedAt?: string;
-    executionTimeMs?: number;
-    hasErrorStacktrace?: boolean;
-    hasScannerContext?: boolean;
-    id: string;
-    logs?: boolean;
-    organization: string;
-    pullRequest?: string;
-    pullRequestTitle?: string;
-    scannerContext?: string;
-    startedAt?: string;
-    status: string;
-    submittedAt: string;
-    submitterLogin?: string;
-    type: string;
-    warningCount?: number;
-    warnings?: string[];
-  }
 
   export interface TestCase {
     coveredLines: number;

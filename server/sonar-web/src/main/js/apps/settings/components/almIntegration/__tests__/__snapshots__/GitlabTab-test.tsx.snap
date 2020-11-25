@@ -1,20 +1,10 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
-exports[`should render correctly: with branch support 1`] = `
+exports[`should render correctly: with URL 1`] = `
 <div
   className="bordered"
 >
   <AlmTab
-    additionalColumnsHeaders={
-      Array [
-        "settings.almintegration.table.column.gitlab.url",
-      ]
-    }
-    additionalColumnsKeys={
-      Array [
-        "url",
-      ]
-    }
     alm="gitlab"
     createConfiguration={[Function]}
     defaultBinding={
@@ -24,6 +14,54 @@ exports[`should render correctly: with branch support 1`] = `
         "url": "",
       }
     }
+    definitionStatus={Object {}}
+    definitions={
+      Array [
+        Object {
+          "key": "foo",
+          "personalAccessToken": "foobar",
+          "url": "https://gitlab.com/api/v4",
+        },
+      ]
+    }
+    form={[Function]}
+    loadingAlmDefinitions={false}
+    loadingProjectCount={false}
+    multipleAlmEnabled={true}
+    onCheck={[MockFunction]}
+    onDelete={[MockFunction]}
+    onUpdateDefinitions={[MockFunction]}
+    updateConfiguration={[Function]}
+  />
+  <div
+    className="huge-spacer-top huge-spacer-bottom bordered-top"
+  />
+  <div
+    className="big-padded"
+  >
+    <Connect(SubCategoryDefinitionsList)
+      category="almintegration"
+      subCategory="gitlab"
+    />
+  </div>
+</div>
+`;
+
+exports[`should render correctly: with branch support 1`] = `
+<div
+  className="bordered"
+>
+  <AlmTab
+    alm="gitlab"
+    createConfiguration={[Function]}
+    defaultBinding={
+      Object {
+        "key": "",
+        "personalAccessToken": "",
+        "url": "",
+      }
+    }
+    definitionStatus={Object {}}
     definitions={
       Array [
         Object {
@@ -32,27 +70,52 @@ exports[`should render correctly: with branch support 1`] = `
         },
       ]
     }
-    features={
-      Array [
-        Object {
-          "active": true,
-          "description": "settings.almintegration.feature.mr_decoration.description",
-          "inactiveReason": "settings.almintegration.feature.need_at_least_1_binding",
-          "name": "settings.almintegration.feature.mr_decoration.title",
-        },
-      ]
-    }
     form={[Function]}
     loadingAlmDefinitions={false}
     loadingProjectCount={false}
     multipleAlmEnabled={true}
+    onCheck={[MockFunction]}
     onDelete={[MockFunction]}
     onUpdateDefinitions={[MockFunction]}
-    optionalFields={
-      Array [
-        "url",
-      ]
+    updateConfiguration={[Function]}
+  />
+  <div
+    className="huge-spacer-top huge-spacer-bottom bordered-top"
+  />
+  <div
+    className="big-padded"
+  >
+    <Connect(SubCategoryDefinitionsList)
+      category="almintegration"
+      subCategory="gitlab"
+    />
+  </div>
+</div>
+`;
+
+exports[`should render correctly: with no definitions 1`] = `
+<div
+  className="bordered"
+>
+  <AlmTab
+    alm="gitlab"
+    createConfiguration={[Function]}
+    defaultBinding={
+      Object {
+        "key": "",
+        "personalAccessToken": "",
+        "url": "",
+      }
     }
+    definitionStatus={Object {}}
+    definitions={Array []}
+    form={[Function]}
+    loadingAlmDefinitions={false}
+    loadingProjectCount={false}
+    multipleAlmEnabled={true}
+    onCheck={[MockFunction]}
+    onDelete={[MockFunction]}
+    onUpdateDefinitions={[MockFunction]}
     updateConfiguration={[Function]}
   />
   <div

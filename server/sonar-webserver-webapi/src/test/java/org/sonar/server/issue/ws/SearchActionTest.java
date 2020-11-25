@@ -92,6 +92,7 @@ import static org.assertj.core.groups.Tuple.tuple;
 import static org.junit.rules.ExpectedException.none;
 import static org.sonar.api.issue.Issue.RESOLUTION_FIXED;
 import static org.sonar.api.issue.Issue.STATUS_RESOLVED;
+import static org.sonar.api.resources.Qualifiers.UNIT_TEST_FILE;
 import static org.sonar.api.rules.RuleType.CODE_SMELL;
 import static org.sonar.api.server.ws.WebService.Param.FACETS;
 import static org.sonar.api.utils.DateUtils.formatDateTime;
@@ -293,6 +294,7 @@ public class SearchActionTest {
         .setChangeData("*My comment*")
         .setChangeType(IssueChangeDto.TYPE_COMMENT)
         .setUserUuid(john.getUuid())
+        .setProjectUuid(project.projectUuid())
         .setIssueChangeCreationDate(parseDateTime("2014-09-09T12:00:00+0000").getTime()));
     dbClient.issueChangeDao().insert(session,
       new IssueChangeDto()
@@ -302,6 +304,7 @@ public class SearchActionTest {
         .setChangeData("Another comment")
         .setChangeType(IssueChangeDto.TYPE_COMMENT)
         .setUserUuid(fabrice.getUuid())
+        .setProjectUuid(project.projectUuid())
         .setIssueChangeCreationDate(parseDateTime("2014-09-10T12:00:00+0000").getTime()));
     session.commit();
     indexIssues();
@@ -330,6 +333,7 @@ public class SearchActionTest {
         .setChangeData("*My comment*")
         .setChangeType(IssueChangeDto.TYPE_COMMENT)
         .setUserUuid(john.getUuid())
+        .setProjectUuid(project.projectUuid())
         .setCreatedAt(parseDateTime("2014-09-09T12:00:00+0000").getTime()));
     dbClient.issueChangeDao().insert(session,
       new IssueChangeDto()
@@ -339,6 +343,7 @@ public class SearchActionTest {
         .setChangeData("Another comment")
         .setChangeType(IssueChangeDto.TYPE_COMMENT)
         .setUserUuid(fabrice.getUuid())
+        .setProjectUuid(project.projectUuid())
         .setCreatedAt(parseDateTime("2014-09-10T19:10:03+0000").getTime()));
     session.commit();
     indexIssues();
@@ -450,7 +455,7 @@ public class SearchActionTest {
     ComponentDto project = db.components().insertComponent(ComponentTesting.newPublicProjectDto(organization, "PROJECT_ID").setDbKey("PROJECT_KEY"));
     indexPermissions();
     ComponentDto file = db.components().insertComponent(newFileDto(project, null, "FILE_ID").setDbKey("FILE_KEY"));
-    for (int i = 0; i < SearchOptions.MAX_LIMIT + 1; i++) {
+    for (int i = 0; i < SearchOptions.MAX_PAGE_SIZE + 1; i++) {
       IssueDto issue = newDto(rule, file, project).setAssigneeUuid(null);
       dbClient.issueDao().insert(session, issue);
     }
@@ -756,7 +761,129 @@ public class SearchActionTest {
     assertThat(ws.newRequest()
       .setMultiParam("author", singletonList("unknown"))
       .executeProtobuf(SearchWsResponse.class).getIssuesList())
-      .isEmpty();
+        .isEmpty();
+  }
+
+  @Test
+  public void filter_by_test_scope() {
+    OrganizationDto organization = db.organizations().insert(p -> p.setUuid("org-1").setKey("org-1"));
+    ComponentDto project = db.components().insertComponent(ComponentTesting.newPublicProjectDto(organization, "PROJECT_ID").setDbKey("PROJECT_KEY"));
+    indexPermissions();
+    ComponentDto mainCodeFile = db.components().insertComponent(
+      newFileDto(project, null, "FILE_ID").setDbKey("FILE_KEY"));
+    ComponentDto testCodeFile = db.components().insertComponent(
+      newFileDto(project, null, "ANOTHER_FILE_ID").setDbKey("ANOTHER_FILE_KEY").setQualifier(UNIT_TEST_FILE));
+    RuleDto rule = newIssueRule();
+    IssueDto issue1 = newDto(rule, mainCodeFile, project)
+      .setIssueCreationDate(parseDate("2014-09-04"))
+      .setIssueUpdateDate(parseDate("2017-12-04"))
+      .setEffort(10L)
+      .setStatus("OPEN")
+      .setKee("82fd47d4-b650-4037-80bc-7b112bd4eac2")
+      .setSeverity("MAJOR");
+    IssueDto issue2 = newDto(rule, mainCodeFile, project)
+      .setIssueCreationDate(parseDate("2014-09-04"))
+      .setIssueUpdateDate(parseDate("2017-12-04"))
+      .setEffort(10L)
+      .setStatus("OPEN")
+      .setKee("7b112bd4-b650-4037-80bc-82fd47d4eac2")
+      .setSeverity("MAJOR");
+    IssueDto issue3 = newDto(rule, testCodeFile, project)
+      .setIssueCreationDate(parseDate("2014-09-04"))
+      .setIssueUpdateDate(parseDate("2017-12-04"))
+      .setEffort(10L)
+      .setStatus("OPEN")
+      .setKee("82fd47d4-4037-b650-80bc-7b112bd4eac2")
+      .setSeverity("MAJOR");
+    dbClient.issueDao().insert(session, issue1, issue2, issue3);
+    session.commit();
+    indexIssues();
+
+    ws.newRequest()
+      .setParam("scopes", "TEST")
+      .setParam(FACETS, "scopes")
+      .execute()
+      .assertJson(this.getClass(), "filter_by_test_scope.json");
+  }
+
+  @Test
+  public void filter_by_main_scope() {
+    OrganizationDto organization = db.organizations().insert(p -> p.setUuid("org-1").setKey("org-1"));
+    ComponentDto project = db.components().insertComponent(ComponentTesting.newPublicProjectDto(organization, "PROJECT_ID").setDbKey("PROJECT_KEY"));
+    indexPermissions();
+    ComponentDto mainCodeFile = db.components().insertComponent(
+      newFileDto(project, null, "FILE_ID").setDbKey("FILE_KEY"));
+    ComponentDto testCodeFile = db.components().insertComponent(
+      newFileDto(project, null, "ANOTHER_FILE_ID").setDbKey("ANOTHER_FILE_KEY").setQualifier(UNIT_TEST_FILE));
+    RuleDto rule = newIssueRule();
+    IssueDto issue1 = newDto(rule, mainCodeFile, project)
+      .setType(CODE_SMELL)
+      .setIssueCreationDate(parseDate("2014-09-04"))
+      .setIssueUpdateDate(parseDate("2017-12-04"))
+      .setEffort(10L)
+      .setStatus("OPEN")
+      .setKee("83ec1d05-9397-4137-9978-85368bcc3b90")
+      .setSeverity("MAJOR");
+    IssueDto issue2 = newDto(rule, mainCodeFile, project)
+      .setType(CODE_SMELL)
+      .setIssueCreationDate(parseDate("2014-09-04"))
+      .setIssueUpdateDate(parseDate("2017-12-04"))
+      .setEffort(10L)
+      .setStatus("OPEN")
+      .setKee("7b112bd4-b650-4037-80bc-82fd47d4eac2")
+      .setSeverity("MAJOR");
+    IssueDto issue3 = newDto(rule, testCodeFile, project)
+      .setType(CODE_SMELL)
+      .setIssueCreationDate(parseDate("2014-09-04"))
+      .setIssueUpdateDate(parseDate("2017-12-04"))
+      .setEffort(10L)
+      .setStatus("OPEN")
+      .setKee("82fd47d4-4037-b650-80bc-7b112bd4eac2")
+      .setSeverity("MAJOR");
+    dbClient.issueDao().insert(session, issue1, issue2, issue3);
+    session.commit();
+    indexIssues();
+
+    ws.newRequest()
+      .setParam("scopes", "MAIN")
+      .setParam(FACETS, "scopes")
+      .execute()
+      .assertJson(this.getClass(), "filter_by_main_scope.json");
+  }
+
+  @Test
+  public void filter_by_scope_always_returns_all_scope_facet_values() {
+    OrganizationDto organization = db.organizations().insert(p -> p.setUuid("org-1").setKey("org-1"));
+    ComponentDto project = db.components().insertComponent(ComponentTesting.newPublicProjectDto(organization, "PROJECT_ID").setDbKey("PROJECT_KEY"));
+    indexPermissions();
+    ComponentDto mainCodeFile = db.components().insertComponent(
+      newFileDto(project, null, "FILE_ID").setDbKey("FILE_KEY"));
+    RuleDto rule = newIssueRule();
+    IssueDto issue1 = newDto(rule, mainCodeFile, project)
+      .setType(CODE_SMELL)
+      .setIssueCreationDate(parseDate("2014-09-04"))
+      .setIssueUpdateDate(parseDate("2017-12-04"))
+      .setEffort(10L)
+      .setStatus("OPEN")
+      .setKee("83ec1d05-9397-4137-9978-85368bcc3b90")
+      .setSeverity("MAJOR");
+    IssueDto issue2 = newDto(rule, mainCodeFile, project)
+      .setType(CODE_SMELL)
+      .setIssueCreationDate(parseDate("2014-09-04"))
+      .setIssueUpdateDate(parseDate("2017-12-04"))
+      .setEffort(10L)
+      .setStatus("OPEN")
+      .setKee("7b112bd4-b650-4037-80bc-82fd47d4eac2")
+      .setSeverity("MAJOR");
+    dbClient.issueDao().insert(session, issue1, issue2);
+    session.commit();
+    indexIssues();
+
+    ws.newRequest()
+      .setParam("scopes", "MAIN")
+      .setParam(FACETS, "scopes")
+      .execute()
+      .assertJson(this.getClass(), "filter_by_main_scope_2.json");
   }
 
   @Test
@@ -788,8 +915,8 @@ public class SearchActionTest {
       // This parameter will be ignored
       .setParam("authors", "leia")
       .executeProtobuf(SearchWsResponse.class).getIssuesList())
-      .extracting(Issue::getKey)
-      .containsExactlyInAnyOrder(issue2.getKey());
+        .extracting(Issue::getKey)
+        .containsExactlyInAnyOrder(issue2.getKey());
   }
 
   @Test
@@ -821,6 +948,110 @@ public class SearchActionTest {
     assertThat(parse.getAsJsonObject().get("issues").getAsJsonArray())
       .extracting(o -> o.getAsJsonObject().get("key").getAsString())
       .containsExactly("82fd47d4-b650-4037-80bc-7b112bd4eac3", "82fd47d4-b650-4037-80bc-7b112bd4eac1", "82fd47d4-b650-4037-80bc-7b112bd4eac2");
+  }
+
+  @Test
+  public void only_vulnerabilities_are_returned_by_cwe() {
+    ComponentDto project = db.components().insertPublicProject();
+    ComponentDto file = db.components().insertComponent(newFileDto(project));
+    Consumer<RuleDefinitionDto> ruleConsumer = ruleDefinitionDto -> ruleDefinitionDto
+      .setSecurityStandards(Sets.newHashSet("cwe:20", "cwe:564", "cwe:89", "cwe:943", "owaspTop10:a1"))
+      .setSystemTags(Sets.newHashSet("bad-practice", "cwe", "owasp-a1", "sans-top25-insecure", "sql"));
+    Consumer<IssueDto> issueConsumer = issueDto -> issueDto.setTags(Sets.newHashSet("bad-practice", "cwe", "owasp-a1", "sans-top25-insecure", "sql"));
+    RuleDefinitionDto hotspotRule = db.rules().insertHotspotRule(ruleConsumer);
+    db.issues().insertHotspot(hotspotRule, project, file, issueConsumer);
+    RuleDefinitionDto issueRule = db.rules().insertIssueRule(ruleConsumer);
+    IssueDto issueDto1 = db.issues().insertIssue(issueRule, project, file, issueConsumer, issueDto -> issueDto.setType(RuleType.VULNERABILITY));
+    IssueDto issueDto2 = db.issues().insertIssue(issueRule, project, file, issueConsumer, issueDto -> issueDto.setType(RuleType.VULNERABILITY));
+    IssueDto issueDto3 = db.issues().insertIssue(issueRule, project, file, issueConsumer, issueDto -> issueDto.setType(CODE_SMELL));
+    indexPermissions();
+    indexIssues();
+
+    SearchWsResponse result = ws.newRequest()
+      .setParam("cwe", "20")
+      .executeProtobuf(SearchWsResponse.class);
+
+    assertThat(result.getIssuesList())
+      .extracting(Issue::getKey)
+      .containsExactlyInAnyOrder(issueDto1.getKey(), issueDto2.getKey());
+  }
+
+  @Test
+  public void only_vulnerabilities_are_returned_by_owasp() {
+    ComponentDto project = db.components().insertPublicProject();
+    ComponentDto file = db.components().insertComponent(newFileDto(project));
+    Consumer<RuleDefinitionDto> ruleConsumer = ruleDefinitionDto -> ruleDefinitionDto
+      .setSecurityStandards(Sets.newHashSet("cwe:20", "cwe:564", "cwe:89", "cwe:943", "owaspTop10:a1"))
+      .setSystemTags(Sets.newHashSet("bad-practice", "cwe", "owasp-a1", "sans-top25-insecure", "sql"));
+    Consumer<IssueDto> issueConsumer = issueDto -> issueDto.setTags(Sets.newHashSet("bad-practice", "cwe", "owasp-a1", "sans-top25-insecure", "sql"));
+    RuleDefinitionDto hotspotRule = db.rules().insertHotspotRule(ruleConsumer);
+    db.issues().insertHotspot(hotspotRule, project, file, issueConsumer);
+    RuleDefinitionDto issueRule = db.rules().insertIssueRule(ruleConsumer);
+    IssueDto issueDto1 = db.issues().insertIssue(issueRule, project, file, issueConsumer, issueDto -> issueDto.setType(RuleType.VULNERABILITY));
+    IssueDto issueDto2 = db.issues().insertIssue(issueRule, project, file, issueConsumer, issueDto -> issueDto.setType(RuleType.VULNERABILITY));
+    IssueDto issueDto3 = db.issues().insertIssue(issueRule, project, file, issueConsumer, issueDto -> issueDto.setType(CODE_SMELL));
+    indexPermissions();
+    indexIssues();
+
+    SearchWsResponse result = ws.newRequest()
+      .setParam("owaspTop10", "a1")
+      .executeProtobuf(SearchWsResponse.class);
+
+    assertThat(result.getIssuesList())
+      .extracting(Issue::getKey)
+      .containsExactlyInAnyOrder(issueDto1.getKey(), issueDto2.getKey());
+  }
+
+  @Test
+  public void only_vulnerabilities_are_returned_by_sansTop25() {
+    ComponentDto project = db.components().insertPublicProject();
+    ComponentDto file = db.components().insertComponent(newFileDto(project));
+    Consumer<RuleDefinitionDto> ruleConsumer = ruleDefinitionDto -> ruleDefinitionDto
+      .setSecurityStandards(Sets.newHashSet("cwe:266", "cwe:732", "owaspTop10:a5"))
+      .setSystemTags(Sets.newHashSet("cert", "cwe", "owasp-a5", "sans-top25-porous"));
+    Consumer<IssueDto> issueConsumer = issueDto -> issueDto.setTags(Sets.newHashSet("cert", "cwe", "owasp-a5", "sans-top25-porous"));
+    RuleDefinitionDto hotspotRule = db.rules().insertHotspotRule(ruleConsumer);
+    db.issues().insertHotspot(hotspotRule, project, file, issueConsumer);
+    RuleDefinitionDto issueRule = db.rules().insertIssueRule(ruleConsumer);
+    IssueDto issueDto1 = db.issues().insertIssue(issueRule, project, file, issueConsumer, issueDto -> issueDto.setType(RuleType.VULNERABILITY));
+    IssueDto issueDto2 = db.issues().insertIssue(issueRule, project, file, issueConsumer, issueDto -> issueDto.setType(RuleType.VULNERABILITY));
+    IssueDto issueDto3 = db.issues().insertIssue(issueRule, project, file, issueConsumer, issueDto -> issueDto.setType(CODE_SMELL));
+    indexPermissions();
+    indexIssues();
+
+    SearchWsResponse result = ws.newRequest()
+      .setParam("sansTop25", "porous-defenses")
+      .executeProtobuf(SearchWsResponse.class);
+
+    assertThat(result.getIssuesList())
+      .extracting(Issue::getKey)
+      .containsExactlyInAnyOrder(issueDto1.getKey(), issueDto2.getKey());
+  }
+
+  @Test
+  public void only_vulnerabilities_are_returned_by_sonarsource_security() {
+    ComponentDto project = db.components().insertPublicProject();
+    ComponentDto file = db.components().insertComponent(newFileDto(project));
+    Consumer<RuleDefinitionDto> ruleConsumer = ruleDefinitionDto -> ruleDefinitionDto
+      .setSecurityStandards(Sets.newHashSet("cwe:20", "cwe:564", "cwe:89", "cwe:943", "owaspTop10:a1"))
+      .setSystemTags(Sets.newHashSet("cwe", "owasp-a1", "sans-top25-insecure", "sql"));
+    Consumer<IssueDto> issueConsumer = issueDto -> issueDto.setTags(Sets.newHashSet("cwe", "owasp-a1", "sans-top25-insecure", "sql"));
+    RuleDefinitionDto hotspotRule = db.rules().insertHotspotRule(ruleConsumer);
+    db.issues().insertHotspot(hotspotRule, project, file, issueConsumer);
+    RuleDefinitionDto issueRule = db.rules().insertIssueRule(ruleConsumer);
+    IssueDto issueDto1 = db.issues().insertIssue(issueRule, project, file, issueConsumer, issueDto -> issueDto.setType(RuleType.VULNERABILITY));
+    IssueDto issueDto2 = db.issues().insertIssue(issueRule, project, file, issueConsumer, issueDto -> issueDto.setType(RuleType.VULNERABILITY));
+    IssueDto issueDto3 = db.issues().insertIssue(issueRule, project, file, issueConsumer, issueDto -> issueDto.setType(CODE_SMELL));
+    indexPermissions();
+    indexIssues();
+
+    SearchWsResponse result = ws.newRequest()
+      .setParam("sonarsourceSecurity", "sql-injection")
+      .executeProtobuf(SearchWsResponse.class);
+
+    assertThat(result.getIssuesList())
+      .extracting(Issue::getKey)
+      .containsExactlyInAnyOrder(issueDto1.getKey(), issueDto2.getKey());
   }
 
   @Test
@@ -875,8 +1106,8 @@ public class SearchActionTest {
     RuleDefinitionDto hotspotRule = db.rules().insertHotspotRule(ruleConsumer);
     db.issues().insertHotspot(hotspotRule, project, file, issueConsumer);
     RuleDefinitionDto issueRule = db.rules().insertIssueRule(ruleConsumer);
-    IssueDto issueDto1 = db.issues().insertIssue(issueRule, project, file, issueConsumer);
-    IssueDto issueDto2 = db.issues().insertIssue(issueRule, project, file, issueConsumer);
+    IssueDto issueDto1 = db.issues().insertIssue(issueRule, project, file, issueConsumer, issueDto -> issueDto.setType(RuleType.VULNERABILITY));
+    IssueDto issueDto2 = db.issues().insertIssue(issueRule, project, file, issueConsumer, issueDto -> issueDto.setType(RuleType.VULNERABILITY));
     indexPermissions();
     indexIssues();
 
@@ -965,8 +1196,8 @@ public class SearchActionTest {
     assertThatThrownBy(() -> ws.newRequest()
       .setParam("types", RuleType.SECURITY_HOTSPOT.toString())
       .execute())
-      .isInstanceOf(IllegalArgumentException.class)
-      .hasMessage("Value of parameter 'types' (SECURITY_HOTSPOT) must be one of: [CODE_SMELL, BUG, VULNERABILITY]");
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessage("Value of parameter 'types' (SECURITY_HOTSPOT) must be one of: [CODE_SMELL, BUG, VULNERABILITY]");
   }
 
   @Test
@@ -1038,23 +1269,12 @@ public class SearchActionTest {
 
   @Test
   public void paging_with_page_size_to_minus_one() {
-    RuleDto rule = newIssueRule();
-    OrganizationDto organization = db.organizations().insert(o -> o.setKey("my-org-1"));
-    ComponentDto project = db.components().insertComponent(ComponentTesting.newPublicProjectDto(organization, "PROJECT_ID").setDbKey("PROJECT_KEY"));
-    indexPermissions();
-    ComponentDto file = db.components().insertComponent(newFileDto(project, null, "FILE_ID").setDbKey("FILE_KEY"));
-    for (int i = 0; i < 12; i++) {
-      IssueDto issue = newDto(rule, file, project);
-      dbClient.issueDao().insert(session, issue);
-    }
-    session.commit();
-    indexIssues();
-
+    expectedException.expect(IllegalArgumentException.class);
+    expectedException.expectMessage("Page size must be between 1 and 500 (got -1)");
     ws.newRequest()
       .setParam(WebService.Param.PAGE, "1")
       .setParam(WebService.Param.PAGE_SIZE, "-1")
-      .execute()
-      .assertJson(this.getClass(), "paging_with_page_size_to_minus_one.json");
+      .execute();
   }
 
   @Test
@@ -1109,7 +1329,8 @@ public class SearchActionTest {
     assertThat(def.params()).extracting("key").containsExactlyInAnyOrder(
       "additionalFields", "asc", "assigned", "assignees", "authors", "author", "componentKeys", "branch",
       "pullRequest", "organization",
-      "createdAfter", "createdAt", "createdBefore", "createdInLast", "directories", "facetMode", "facets", "fileUuids", "issues", "languages", "moduleUuids", "onComponentOnly",
+      "createdAfter", "createdAt", "createdBefore", "createdInLast", "directories", "facetMode", "facets", "files", "issues", "scopes", "languages", "moduleUuids",
+      "onComponentOnly",
       "p", "projects", "ps", "resolutions", "resolved", "rules", "s", "severities", "sinceLeakPeriod",
       "statuses", "tags", "types", "owaspTop10", "sansTop25", "cwe", "sonarsourceSecurity");
 
@@ -1158,7 +1379,6 @@ public class SearchActionTest {
     dbClient.groupPermissionDao().insert(session,
       new GroupPermissionDto()
         .setUuid(Uuids.createFast())
-        .setOrganizationUuid(project.getOrganizationUuid())
         .setGroupUuid(null)
         .setComponentUuid(project.uuid())
         .setRole(permission));

@@ -5,7 +5,7 @@ url: /analysis/coverage/
 
 This page lists analysis parameters related to test coverage and execution reports. For more other parameters, see [Analysis Parameters](/analysis/analysis-parameters/).
 
-SonarSource analyzers do not run your tests or generate reports. They only import pre-generated reports. Below you'll find language- and tool-specific analysis parameters for importing coverage and execution reports.
+SonarQube doesn't run your tests or generate reports. It only imports pre-generated reports. Below you'll find language- and tool-specific analysis parameters for importing coverage and execution reports.
 
 In the [Guides](https://community.sonarsource.com/c/announce/guides) category of the [SonarSource Community forum](https://community.sonarsource.com/) you might find instructions on generating these reports.
 
@@ -16,8 +16,6 @@ Symbol|Meaning
 `?`|a single character
 `*`|any number of characters
 `**`|any number of directories
-
-
 
 ## Test Coverage
 Unless otherwise specified, these properties require values that are relative to project root.
@@ -68,10 +66,12 @@ VB.NET|`sonar.vbnet.vstest.reportsPaths`|Paths to VSTest execution reports. Mult
 VB.NET|`sonar.vbnet.nunit.reportsPaths`|Paths to NUnit execution reports. Multiple paths may be comma-delimited, or included via wildcards. Note that while measures such as the number of tests are displayed at project level, no drilldown is available.
 VB.NET|`sonar.vbnet.xunit.reportsPaths`|Paths to xUnit execution reports. Multiple paths may be comma-delimited, or included via wildcards. Note that while measures such as the number of tests are displayed at project level, no drilldown is available.
 
-**Notes on importing .NET reports**  
-.NET reports are imported into SonarQube in 4 steps:
+## Importing .NET reports
+To import .NET reports, the report generation process must be executed after the begin step and before the end MSBuild command. The following steps detail importing .NET reports:
 
 1. Run the SonarScanner.MSBuild.exe `begin` command, specifying the absolute path where the reports _will be_ available using the `/d:propertyKey="path"` syntax ("propertyKey" depends on the tool)
 1. Build your project using MSBuild
 1. Run your test tool, instructing it to produce a report at the same location specified earlier to the MSBuild SonarQube Runner ([How to generate reports with different tools](https://community.sonarsource.com/t/coverage-test-data-generate-reports-for-c-vb-net/9871)) 
 1. Run the SonarScanner.MSBuild.exe `end` command
+
+For more information, see the [Generate Reports for C#, VB.net Community Post](https://community.sonarsource.com/t/coverage-test-data-generate-reports-for-c-vb-net/9871).

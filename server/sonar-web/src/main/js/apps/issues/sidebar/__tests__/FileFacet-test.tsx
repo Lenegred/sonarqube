@@ -19,9 +19,22 @@
  */
 import { shallow } from 'enzyme';
 import * as React from 'react';
-import { TreeComponentWithPath } from '../../../../api/components';
-import { Query, ReferencedComponent } from '../../utils';
+import { getFiles } from '../../../../api/components';
+import ListStyleFacet from '../../../../components/facet/ListStyleFacet';
+import { mockBranch } from '../../../../helpers/mocks/branch-like';
+import { mockComponent } from '../../../../helpers/testMocks';
+import { TreeComponentWithPath } from '../../../../types/component';
+import { Query } from '../../utils';
 import FileFacet from '../FileFacet';
+
+jest.mock('../../../../api/components', () => ({
+  getFiles: jest.fn().mockResolvedValue({})
+}));
+
+beforeEach(() => jest.clearAllMocks());
+
+const branch = mockBranch();
+const component = mockComponent();
 
 it('should render correctly', () => {
   const wrapper = shallowRender();
@@ -31,6 +44,25 @@ it('should render correctly', () => {
     instance.renderSearchResult({ path: 'foo/bar.js' } as TreeComponentWithPath, 'foo')
   ).toMatchSnapshot();
   expect(instance.renderFacetItem('fooUuid')).toMatchSnapshot();
+});
+
+it('should properly search for file', () => {
+  const wrapper = shallowRender();
+
+  const query = 'foo';
+
+  wrapper
+    .find(ListStyleFacet)
+    .props()
+    .onSearch(query);
+
+  expect(getFiles).toHaveBeenCalledWith({
+    branch: branch.name,
+    component: component.key,
+    q: query,
+    ps: 30,
+    p: undefined
+  });
 });
 
 describe("ListStyleFacet's callback props", () => {
@@ -44,12 +76,12 @@ describe("ListStyleFacet's callback props", () => {
   });
 
   it('#getSearchResultKey()', () => {
-    expect(instance.getSearchResultKey({ key: 'foo' } as TreeComponentWithPath)).toBe('fooUuid');
-    expect(instance.getSearchResultKey({ key: 'bar' } as TreeComponentWithPath)).toBe('bar');
+    expect(instance.getSearchResultKey({ key: 'bar', path: 'bar' } as TreeComponentWithPath)).toBe(
+      'bar'
+    );
   });
 
   it('#getFacetItemText()', () => {
-    expect(instance.getFacetItemText('fooUuid')).toBe('foo/bar.js');
     expect(instance.getFacetItemText('bar')).toBe('bar');
   });
 });
@@ -57,17 +89,15 @@ describe("ListStyleFacet's callback props", () => {
 function shallowRender(props: Partial<FileFacet['props']> = {}) {
   return shallow<FileFacet>(
     <FileFacet
-      componentKey="foo"
+      branchLike={branch}
+      componentKey={component.key}
       fetching={false}
-      fileUuids={['foo', 'bar']}
+      files={['foo', 'bar']}
       loadSearchResultCount={jest.fn()}
       onChange={jest.fn()}
       onToggle={jest.fn()}
       open={false}
       query={{} as Query}
-      referencedComponents={{
-        fooUuid: { key: 'foo', uuid: 'fooUuid', path: 'foo/bar.js' } as ReferencedComponent
-      }}
       stats={undefined}
       {...props}
     />

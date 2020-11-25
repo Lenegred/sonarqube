@@ -24,23 +24,12 @@ import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
 
 public class PermissionTemplateDto {
-
   private String name;
-  private String organizationUuid;
   private String uuid;
   private String description;
   private String keyPattern;
   private Date createdAt;
   private Date updatedAt;
-
-  public String getOrganizationUuid() {
-    return organizationUuid;
-  }
-
-  public PermissionTemplateDto setOrganizationUuid(String s) {
-    this.organizationUuid = s;
-    return this;
-  }
 
   public String getName() {
     return name;

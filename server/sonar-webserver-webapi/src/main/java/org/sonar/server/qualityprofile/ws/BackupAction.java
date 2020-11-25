@@ -57,8 +57,6 @@ public class BackupAction implements QProfileWsAction {
       .setHandler(this);
 
     QProfileReference.defineParams(action, languages);
-
-    QProfileWsSupport.createOrganizationParam(action).setSince("6.4");
   }
 
   @Override
@@ -66,12 +64,17 @@ public class BackupAction implements QProfileWsAction {
     // Allowed to users without admin permission: http://jira.sonarsource.com/browse/SONAR-2039
     Stream stream = response.stream();
     stream.setMediaType(MediaTypes.XML);
+    QProfileDto profile = loadQProfile(request);
     try (OutputStreamWriter writer = new OutputStreamWriter(stream.output(), UTF_8);
       DbSession dbSession = dbClient.openSession(false)) {
-
-      QProfileDto profile = wsSupport.getProfile(dbSession, QProfileReference.fromName(request));
       response.setHeader("Content-Disposition", String.format("attachment; filename=%s.xml", profile.getKee()));
       backuper.backup(dbSession, profile, writer);
+    }
+  }
+
+  private QProfileDto loadQProfile(Request request) {
+    try (DbSession dbSession = dbClient.openSession(false)) {
+      return wsSupport.getProfile(dbSession, QProfileReference.fromName(request));
     }
   }
 }

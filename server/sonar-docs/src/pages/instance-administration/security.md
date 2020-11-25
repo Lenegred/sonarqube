@@ -28,6 +28,50 @@ To force user authentication, log in as a system administrator, go to **[Adminis
 [[info]]
 | SonarQube does not support sharing email addresses across multiple users.
 
+### API Endpoints Authentication
+
+If the **Force user authentication** property is set to false, the following API endpoints are accessible **without authentication** (click **API endpoints** below to expand the list):
+
+[[collapse]]
+| ## API endpoints
+|
+| * api/components/search
+| * api/issues/tags
+| * api/languages/list
+| * api/metrics/domains
+| * api/metrics/search
+| * api/metrics/types
+| * api/plugins/installed
+| * api/project_tags/search
+| * api/qualitygates/list
+| * api/qualitygates/search
+| * api/qualitygates/show
+| * api/qualityprofiles/backup
+| * api/qualityprofiles/changelog
+| * api/qualityprofiles/export
+| * api/qualityprofiles/exporters
+| * api/qualityprofiles/importers
+| * api/qualityprofiles/inheritance
+| * api/qualityprofiles/projects
+| * api/qualityprofiles/search
+| * api/rules/repositories
+| * api/rules/search
+| * api/rules/show
+| * api/rules/tags
+| * api/server/version
+| * api/sources/scm (for public repositories)
+| * api/sources/show (for public repositories)
+| * api/system/db_migration_status
+| * api/system/migrate_db
+| * api/system/ping
+| * api/system/status
+| * api/system/upgrades
+| * api/users/search
+| * api/views/run
+| * api/webservices/list
+| * api/webservices/response_example
+
+It is advised to enable **Force user authentication** if you have your SonarQube instance publicly accessible.
 
 ### Authentication Mechanisms
 Authentication can be managed through a number of mechanisms:
@@ -88,7 +132,7 @@ Two groups have a special meaning:
 To set global permissions, log in as a System administrator and go to **[Administration > Security > Global Permissions](/#sonarqube-admin#/admin/permissions)**. 
 
 * **Administer System**: All administration functions for the instance: global configuration.
-* **Administer Quality Profiles**: Any action on quality profiles.
+* **Administer Quality Profiles**: Any action on Quality Profiles.
 * **Administer Quality Gates**: Any action on quality gates
 * **Execute Analysis**: Execute analyses (project, view, report, developer), and to get all settings required to perform the analysis, even the secured ones like the scm account password, and so on.
 * **Create Projects**: Initialize the structure of a new project before its first analysis. This permission is also required when doing the very first analysis of a project that has not already been created via the GUI. * **
@@ -142,7 +186,7 @@ Encryption is mostly used to remove clear passwords from settings (database or S
 The algorithm is AES 128 bits. Note that 256 bits cipher is not used because it's not supported by default on all Java Virtual Machines ([see this article](https://confluence.terena.org/display/~visser/No+256+bit+ciphers+for+Java+apps)).
 
 1. **Generate the secret key**  
-A unique secret key must be shared between all parts of the SonarQube infrastructure (server and analyzers). To generate it, go to **[Administration > Configuration > Encryption](/#sonarqube-admin#/admin/settings/encryption)** and click on Generate Secret Key.
+A unique secret key must be shared between all parts of the SonarQube infrastructure. To generate it, go to **[Administration > Configuration > Encryption](/#sonarqube-admin#/admin/settings/encryption)** and click on Generate Secret Key.
 1. **Store the secret key on the SonarQube server**  
    * Copy the generated secred key to a file on the machine hosting the SonarQube server. The default location is _~/.sonar/sonar-secret.txt_. If you want to store it somewhere else, set its path through the `sonar.secretKeyPath` property in _$SONARQUBE-HOME/conf/sonar.properties_
    * Restrict file permissions to the account running the SonarQube server (ownership and read-access only).
@@ -157,4 +201,3 @@ sonar.jdbc.password={aes}CCGCFg4Xpm6r+PiJb1Swfg==  # Encrypted DB password
 ...
 sonar.secretKeyPath=C:/path/to/my/secure/location/my_secret_key.txt
 ```
-

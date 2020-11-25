@@ -17,21 +17,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
-import { LanguageConfig } from './types';
-
-export function isLanguageConfigured(config?: LanguageConfig) {
-  if (!config) {
-    return false;
-  }
-  const { language, javaBuild, cFamilyCompiler, os, projectKey } = config;
-  const isJavaConfigured = language === 'java' && javaBuild != null;
-  const isDotNetConfigured = language === 'dotnet' && projectKey != null;
-  const isCFamilyConfigured =
-    language === 'c-family' && (cFamilyCompiler === 'msvc' || os != null) && projectKey != null;
-  const isOtherConfigured = language === 'other' && projectKey != null;
-
-  return isJavaConfigured || isDotNetConfigured || isCFamilyConfigured || isOtherConfigured;
-}
+import { GithubBindingDefinition, ProjectAlmBindingResponse } from '../../types/alm-settings';
 
 export function quote(os: string): (s: string) => string {
   return os === 'win' ? (s: string) => `"${s}"` : (s: string) => s;
@@ -49,4 +35,17 @@ export function getUniqueTokenName(tokens: T.UserToken[], initialTokenName = '')
     i++;
   }
   return `${initialTokenName} ${i}`;
+}
+
+export function buildGithubLink(
+  almBinding: GithubBindingDefinition,
+  projectBinding: ProjectAlmBindingResponse
+) {
+  // strip the api path:
+  const urlRoot = almBinding.url
+    .replace('/api/v3', '') // GH Enterprise
+    .replace('api.', '') // GH.com
+    .replace(/\/$/, '');
+
+  return `${urlRoot}/${projectBinding.repository}`;
 }

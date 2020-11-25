@@ -41,8 +41,7 @@ import org.sonarqube.ws.Qualitygates;
 import static com.google.common.base.Preconditions.checkArgument;
 import static java.lang.String.format;
 import static org.sonar.api.web.UserRole.ADMIN;
-import static org.sonar.db.organization.OrganizationDto.Subscription.PAID;
-import static org.sonar.db.permission.OrganizationPermission.ADMINISTER_QUALITY_GATES;
+import static org.sonar.db.permission.GlobalPermission.ADMINISTER_QUALITY_GATES;
 import static org.sonar.server.exceptions.NotFoundException.checkFound;
 import static org.sonar.server.exceptions.NotFoundException.checkFoundWithOptional;
 import static org.sonar.server.qualitygate.ws.QualityGatesWsParameters.PARAM_ORGANIZATION;
@@ -78,8 +77,8 @@ public class QualityGatesWsSupport {
     return checkFound(dbClient.gateConditionDao().selectByUuid(uuid, dbSession), "No quality gate condition with uuid '%s'", uuid);
   }
 
-  boolean isQualityGateAdmin(OrganizationDto organization) {
-    return userSession.hasPermission(ADMINISTER_QUALITY_GATES, organization);
+  boolean isQualityGateAdmin() {
+    return userSession.hasPermission(ADMINISTER_QUALITY_GATES);
   }
 
   WebService.NewParam createOrganizationParam(NewAction action) {
@@ -92,10 +91,10 @@ public class QualityGatesWsSupport {
       .setExampleValue("my-org");
   }
 
-  Qualitygates.Actions getActions(OrganizationDto organization, QualityGateDto qualityGate, @Nullable QualityGateDto defaultQualityGate) {
+  Qualitygates.Actions getActions(QualityGateDto qualityGate, @Nullable QualityGateDto defaultQualityGate) {
     boolean isDefault = defaultQualityGate != null && Objects.equals(defaultQualityGate.getUuid(), qualityGate.getUuid());
     boolean isBuiltIn = qualityGate.isBuiltIn();
-    boolean isQualityGateAdmin = isQualityGateAdmin(organization);
+    boolean isQualityGateAdmin = isQualityGateAdmin();
     return Qualitygates.Actions.newBuilder()
       .setCopy(isQualityGateAdmin)
       .setRename(!isBuiltIn && isQualityGateAdmin)
@@ -106,22 +105,28 @@ public class QualityGatesWsSupport {
       .build();
   }
 
+  OrganizationDto getDefaultOrganization(DbSession dbSession) {
+    return getOrganization(dbSession, defaultOrganizationProvider.get().getKey());
+  }
+
+  OrganizationDto getOrganization(DbSession dbSession, String key) {
+    Optional<OrganizationDto> organizationDto = dbClient.organizationDao().selectByKey(dbSession, key);
+    return checkFoundWithOptional(organizationDto, "No organization with key '%s'", key);
+  }
+
   OrganizationDto getOrganization(DbSession dbSession, Request request) {
     String organizationKey = Optional.ofNullable(request.param(PARAM_ORGANIZATION))
       .orElseGet(() -> defaultOrganizationProvider.get().getKey());
-    Optional<OrganizationDto> organizationDto = dbClient.organizationDao().selectByKey(dbSession, organizationKey);
-    OrganizationDto organization = checkFoundWithOptional(organizationDto, "No organization with key '%s'", organizationKey);
-    checkMembershipOnPaidOrganization(organization);
-    return organization;
+    return getOrganization(dbSession, organizationKey);
   }
 
   void checkCanEdit(QGateWithOrgDto qualityGate) {
     checkNotBuiltIn(qualityGate);
-    userSession.checkPermission(ADMINISTER_QUALITY_GATES, qualityGate.getOrganizationUuid());
+    userSession.checkPermission(ADMINISTER_QUALITY_GATES);
   }
 
-  void checkCanAdminProject(OrganizationDto organization, ProjectDto project) {
-    if (userSession.hasPermission(ADMINISTER_QUALITY_GATES, organization)
+  void checkCanAdminProject(ProjectDto project) {
+    if (userSession.hasPermission(ADMINISTER_QUALITY_GATES)
       || userSession.hasProjectPermission(ADMIN, project)) {
       return;
     }
@@ -143,13 +148,6 @@ public class QualityGatesWsSupport {
 
   private static void checkNotBuiltIn(QualityGateDto qualityGate) {
     checkArgument(!qualityGate.isBuiltIn(), "Operation forbidden for built-in Quality Gate '%s'", qualityGate.getName());
-  }
-
-  private void checkMembershipOnPaidOrganization(OrganizationDto organization) {
-    if (!organization.getSubscription().equals(PAID)) {
-      return;
-    }
-    userSession.checkMembership(organization);
   }
 
 }

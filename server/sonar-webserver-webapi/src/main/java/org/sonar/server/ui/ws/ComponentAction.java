@@ -42,12 +42,11 @@ import org.sonar.api.web.UserRole;
 import org.sonar.api.web.page.Page;
 import org.sonar.db.DbClient;
 import org.sonar.db.DbSession;
-import org.sonar.db.alm.ProjectAlmBindingDto;
 import org.sonar.db.component.ComponentDto;
 import org.sonar.db.component.SnapshotDto;
 import org.sonar.db.measure.LiveMeasureDto;
 import org.sonar.db.organization.OrganizationDto;
-import org.sonar.db.permission.OrganizationPermission;
+import org.sonar.db.permission.GlobalPermission;
 import org.sonar.db.property.PropertyDto;
 import org.sonar.db.property.PropertyQuery;
 import org.sonar.db.qualitygate.QualityGateDto;
@@ -71,8 +70,8 @@ import static org.sonar.api.utils.DateUtils.formatDateTime;
 import static org.sonar.api.web.UserRole.ADMIN;
 import static org.sonar.api.web.UserRole.USER;
 import static org.sonar.core.util.stream.MoreCollectors.uniqueIndex;
-import static org.sonar.db.permission.OrganizationPermission.ADMINISTER_QUALITY_GATES;
-import static org.sonar.db.permission.OrganizationPermission.ADMINISTER_QUALITY_PROFILES;
+import static org.sonar.db.permission.GlobalPermission.ADMINISTER_QUALITY_GATES;
+import static org.sonar.db.permission.GlobalPermission.ADMINISTER_QUALITY_PROFILES;
 import static org.sonar.server.user.AbstractUserSession.insufficientPrivilegesException;
 import static org.sonar.server.ws.KeyExamples.KEY_BRANCH_EXAMPLE_001;
 import static org.sonar.server.ws.KeyExamples.KEY_PROJECT_EXAMPLE_001;
@@ -166,12 +165,11 @@ public class ComponentAction implements NavigationWsAction {
         json.beginObject();
         boolean isFavourite = isFavourite(session, rootProject);
         writeComponent(json, component, org, analysis.orElse(null), isFavourite);
-        writeAlmDetails(json, session, rootProject);
         writeProfiles(json, session, component);
         writeQualityGate(json, session, org, rootProject);
         if (userSession.hasComponentPermission(ADMIN, component) ||
-          userSession.hasPermission(ADMINISTER_QUALITY_PROFILES, org) ||
-          userSession.hasPermission(ADMINISTER_QUALITY_GATES, org)) {
+          userSession.hasPermission(ADMINISTER_QUALITY_PROFILES) ||
+          userSession.hasPermission(ADMINISTER_QUALITY_GATES)) {
           writeConfiguration(json, component, org);
         }
         writeBreadCrumbs(json, session, component);
@@ -190,17 +188,6 @@ public class ComponentAction implements NavigationWsAction {
     } else {
       return component;
     }
-  }
-
-  private void writeAlmDetails(JsonWriter json, DbSession session, ComponentDto component) {
-    Optional<ProjectAlmBindingDto> bindingOpt = dbClient.projectAlmBindingsDao().selectByProjectUuid(session, component.uuid());
-    bindingOpt.ifPresent(b -> {
-      String almId = b.getAlm().getId();
-      json.name("alm").beginObject()
-        .prop("key", almId)
-        .prop("url", b.getUrl())
-        .endObject();
-    });
   }
 
   private static void writeToJson(JsonWriter json, QualityProfile profile, boolean deleted) {
@@ -306,9 +293,9 @@ public class ComponentAction implements NavigationWsAction {
     boolean isProject = Qualifiers.PROJECT.equals(component.qualifier());
     boolean showManualMeasures = isProjectAdmin && !Qualifiers.DIRECTORY.equals(component.qualifier());
     boolean showBackgroundTasks = isProjectAdmin && (isProject || Qualifiers.VIEW.equals(component.qualifier()) || Qualifiers.APP.equals(component.qualifier()));
-    boolean isQualityProfileAdmin = userSession.hasPermission(OrganizationPermission.ADMINISTER_QUALITY_PROFILES, component.getOrganizationUuid());
-    boolean isQualityGateAdmin = userSession.hasPermission(OrganizationPermission.ADMINISTER_QUALITY_GATES, component.getOrganizationUuid());
-    boolean isOrganizationAdmin = userSession.hasPermission(OrganizationPermission.ADMINISTER, component.getOrganizationUuid());
+    boolean isQualityProfileAdmin = userSession.hasPermission(GlobalPermission.ADMINISTER_QUALITY_PROFILES);
+    boolean isQualityGateAdmin = userSession.hasPermission(GlobalPermission.ADMINISTER_QUALITY_GATES);
+    boolean isOrganizationAdmin = userSession.hasPermission(GlobalPermission.ADMINISTER);
     boolean canBrowseProject = userSession.hasComponentPermission(USER, component);
 
     json.prop("showSettings", isProjectAdmin && componentTypeHasProperty(component, PROPERTY_CONFIGURABLE));

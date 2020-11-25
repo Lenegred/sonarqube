@@ -48,7 +48,6 @@ import org.sonar.db.permission.template.PermissionTemplateDto;
 import org.sonar.db.project.ProjectDto;
 import org.sonar.db.qualitygate.QGateWithOrgDto;
 import org.sonar.db.qualitygate.QualityGateDto;
-import org.sonar.db.qualityprofile.QProfileDto;
 import org.sonar.db.user.GroupDto;
 import org.sonar.db.user.UserDto;
 import org.sonar.db.webhook.WebhookDto;
@@ -104,9 +103,7 @@ public class OrganizationDeleterTest {
   private final BillingValidationsProxy billingValidations = mock(BillingValidationsProxy.class);
 
   private final OrganizationDeleter underTest = new OrganizationDeleter(dbClient, componentCleanerService, userIndexer,
-    new QProfileFactoryImpl(dbClient, UuidFactoryFast.getInstance(), new System2(), new ActiveRuleIndexer(dbClient, esClient)),
-    projectLifeCycleListeners,
-    billingValidations);
+    new QProfileFactoryImpl(dbClient, UuidFactoryFast.getInstance(), new System2(), new ActiveRuleIndexer(dbClient, esClient)), projectLifeCycleListeners, billingValidations);
 
   @Test
   public void delete_specified_organization() {
@@ -204,58 +201,6 @@ public class OrganizationDeleterTest {
   }
 
   @Test
-  public void delete_permissions_templates_and_permissions_and_groups() {
-    OrganizationDto org = db.organizations().insert();
-    OrganizationDto otherOrg = db.organizations().insert();
-
-    UserDto user1 = db.users().insertUser();
-    UserDto user2 = db.users().insertUser();
-    GroupDto group1 = db.users().insertGroup(org);
-    GroupDto group2 = db.users().insertGroup(org);
-    GroupDto otherGroup1 = db.users().insertGroup(otherOrg);
-    GroupDto otherGroup2 = db.users().insertGroup(otherOrg);
-
-    ComponentDto projectDto = db.components().insertPublicProject(org);
-    ComponentDto otherProjectDto = db.components().insertPublicProject(otherOrg);
-
-    db.users().insertPermissionOnAnyone(org, "u1");
-    db.users().insertPermissionOnAnyone(otherOrg, "not deleted u1");
-    db.users().insertPermissionOnUser(org, user1, "u2");
-    db.users().insertPermissionOnUser(otherOrg, user1, "not deleted u2");
-    db.users().insertPermissionOnGroup(group1, "u3");
-    db.users().insertPermissionOnGroup(otherGroup1, "not deleted u3");
-    db.users().insertProjectPermissionOnAnyone("u4", projectDto);
-    db.users().insertProjectPermissionOnAnyone("not deleted u4", otherProjectDto);
-    db.users().insertProjectPermissionOnGroup(group1, "u5", projectDto);
-    db.users().insertProjectPermissionOnGroup(otherGroup1, "not deleted u5", otherProjectDto);
-    db.users().insertProjectPermissionOnUser(user1, "u6", projectDto);
-    db.users().insertProjectPermissionOnUser(user1, "not deleted u6", otherProjectDto);
-
-    PermissionTemplateDto templateDto = db.permissionTemplates().insertTemplate(org);
-    PermissionTemplateDto otherTemplateDto = db.permissionTemplates().insertTemplate(otherOrg);
-
-    underTest.delete(dbSession, org);
-
-    verifyOrganizationDoesNotExist(org);
-    assertThat(dbClient.groupDao().selectByUuids(dbSession, of(group1.getUuid(), otherGroup1.getUuid(), group2.getUuid(), otherGroup2.getUuid())))
-      .extracting(GroupDto::getUuid)
-      .containsOnly(otherGroup1.getUuid(), otherGroup2.getUuid());
-    assertThat(dbClient.permissionTemplateDao().selectByUuid(dbSession, templateDto.getUuid()))
-      .isNull();
-    assertThat(dbClient.permissionTemplateDao().selectByUuid(dbSession, otherTemplateDto.getUuid()))
-      .isNotNull();
-    assertThat(db.select("select role as \"role\" from USER_ROLES"))
-      .extracting(row -> (String) row.get("role"))
-      .doesNotContain("u2", "u6")
-      .contains("not deleted u2", "not deleted u6");
-    assertThat(db.select("select role as \"role\" from GROUP_ROLES"))
-      .extracting(row -> (String) row.get("role"))
-      .doesNotContain("u1", "u3", "u4", "u5")
-      .contains("not deleted u1", "not deleted u3", "not deleted u4", "not deleted u5");
-    verify(projectLifeCycleListeners).onProjectsDeleted(ImmutableSet.of(Project.from(projectDto)));
-  }
-
-  @Test
   public void delete_members() {
     OrganizationDto org = db.organizations().insert();
     OrganizationDto otherOrg = db.organizations().insert();
@@ -275,21 +220,6 @@ public class OrganizationDeleterTest {
     assertThat(userIndex.search(UserQuery.builder().setOrganizationUuid(org.getUuid()).build(), new SearchOptions()).getTotal()).isEqualTo(0);
     assertThat(userIndex.search(UserQuery.builder().setOrganizationUuid(otherOrg.getUuid()).build(), new SearchOptions()).getTotal()).isEqualTo(1);
     verify(projectLifeCycleListeners).onProjectsDeleted(emptySet());
-  }
-
-  @Test
-  public void delete_quality_profiles() {
-    OrganizationDto org = db.organizations().insert();
-    OrganizationDto otherOrg = db.organizations().insert();
-    QProfileDto profileInOrg = db.qualityProfiles().insert(org);
-    QProfileDto profileInOtherOrg = db.qualityProfiles().insert(otherOrg);
-
-    underTest.delete(dbSession, org);
-
-    verifyOrganizationDoesNotExist(org);
-    assertThat(db.select("select uuid as \"profileKey\" from org_qprofiles"))
-      .extracting(row -> (String) row.get("profileKey"))
-      .containsOnly(profileInOtherOrg.getKee());
   }
 
   @Test

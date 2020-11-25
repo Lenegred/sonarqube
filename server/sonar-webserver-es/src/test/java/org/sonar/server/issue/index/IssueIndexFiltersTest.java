@@ -32,6 +32,7 @@ import org.junit.rules.ExpectedException;
 import org.sonar.api.impl.utils.TestSystem2;
 import org.sonar.api.issue.Issue;
 import org.sonar.api.rule.Severity;
+import org.sonar.api.rules.RuleType;
 import org.sonar.api.utils.System2;
 import org.sonar.db.DbTester;
 import org.sonar.db.component.ComponentDto;
@@ -42,6 +43,7 @@ import org.sonar.server.es.SearchOptions;
 import org.sonar.server.permission.index.IndexPermissions;
 import org.sonar.server.permission.index.PermissionIndexerTester;
 import org.sonar.server.permission.index.WebAuthorizationTypeSupport;
+import org.sonar.server.security.SecurityStandards.SQCategory;
 import org.sonar.server.tester.UserSessionRule;
 import org.sonar.server.view.index.ViewDoc;
 import org.sonar.server.view.index.ViewIndexer;
@@ -153,8 +155,8 @@ public class IssueIndexFiltersTest {
       newDoc("I5", subModule),
       newDoc("I6", file3));
 
-    assertThatSearchReturnsOnly(IssueQuery.builder().fileUuids(asList(file1.uuid(), file2.uuid(), file3.uuid())), "I2", "I4", "I6");
-    assertThatSearchReturnsOnly(IssueQuery.builder().fileUuids(singletonList(file1.uuid())), "I2");
+    assertThatSearchReturnsOnly(IssueQuery.builder().files(asList(file1.path(), file2.path(), file3.path())), "I2", "I4", "I6");
+    assertThatSearchReturnsOnly(IssueQuery.builder().files(singletonList(file1.path())), "I2");
     assertThatSearchReturnsOnly(IssueQuery.builder().moduleRootUuids(singletonList(subModule.uuid())), "I5", "I6");
     assertThatSearchReturnsOnly(IssueQuery.builder().moduleRootUuids(singletonList(module.uuid())), "I3", "I4", "I5", "I6");
     assertThatSearchReturnsOnly(IssueQuery.builder().projectUuids(singletonList(project.uuid())), "I1", "I2", "I3", "I4", "I5", "I6");
@@ -186,8 +188,8 @@ public class IssueIndexFiltersTest {
     assertThatSearchReturnsOnly(IssueQuery.builder().viewUuids(singletonList(view)), "I1", "I2", "I3", "I4", "I5", "I6");
     assertThatSearchReturnsOnly(IssueQuery.builder().moduleUuids(singletonList(module.uuid())), "I3", "I4");
     assertThatSearchReturnsOnly(IssueQuery.builder().moduleUuids(singletonList(subModule.uuid())), "I5", "I6");
-    assertThatSearchReturnsOnly(IssueQuery.builder().fileUuids(singletonList(file1.uuid())), "I2");
-    assertThatSearchReturnsOnly(IssueQuery.builder().fileUuids(asList(file1.uuid(), file2.uuid(), file3.uuid())), "I2", "I4", "I6");
+    assertThatSearchReturnsOnly(IssueQuery.builder().files(singletonList(file1.path())), "I2");
+    assertThatSearchReturnsOnly(IssueQuery.builder().files(asList(file1.path(), file2.path(), file3.path())), "I2", "I4", "I6");
   }
 
   @Test
@@ -226,7 +228,7 @@ public class IssueIndexFiltersTest {
     assertThatSearchReturnsOnly(IssueQuery.builder().viewUuids(asList(portfolio1.uuid(), portfolio2.uuid())), issueOnProject1.key(), issueOnFile.key(), issueOnProject2.key());
     assertThatSearchReturnsOnly(IssueQuery.builder().viewUuids(singletonList(portfolio1.uuid())).projectUuids(singletonList(project1.uuid())), issueOnProject1.key(),
       issueOnFile.key());
-    assertThatSearchReturnsOnly(IssueQuery.builder().viewUuids(singletonList(portfolio1.uuid())).fileUuids(singletonList(file.uuid())), issueOnFile.key());
+    assertThatSearchReturnsOnly(IssueQuery.builder().viewUuids(singletonList(portfolio1.uuid())).files(singletonList(file.path())), issueOnFile.key());
     assertThatSearchReturnsEmpty(IssueQuery.builder().viewUuids(singletonList("unknown")));
   }
 
@@ -300,8 +302,8 @@ public class IssueIndexFiltersTest {
 
     assertThatSearchReturnsOnly(IssueQuery.builder().branchUuid(branch.uuid()).mainBranch(false), "I4", "I5", "I6");
     assertThatSearchReturnsOnly(IssueQuery.builder().moduleUuids(singletonList(branchModule.uuid())).branchUuid(branch.uuid()).mainBranch(false), "I5", "I6");
-    assertThatSearchReturnsOnly(IssueQuery.builder().fileUuids(singletonList(branchFile.uuid())).branchUuid(branch.uuid()).mainBranch(false), "I6");
-    assertThatSearchReturnsEmpty(IssueQuery.builder().fileUuids(singletonList(branchFile.uuid())).mainBranch(false).branchUuid("unknown"));
+    assertThatSearchReturnsOnly(IssueQuery.builder().files(singletonList(branchFile.path())).branchUuid(branch.uuid()).mainBranch(false), "I6");
+    assertThatSearchReturnsEmpty(IssueQuery.builder().files(singletonList(branchFile.uuid())).mainBranch(false).branchUuid("unknown"));
   }
 
   @Test
@@ -353,7 +355,7 @@ public class IssueIndexFiltersTest {
     assertThatSearchReturnsOnly(IssueQuery.builder().viewUuids(asList(application1.uuid(), application2.uuid())), issueOnProject1.key(), issueOnFile.key(), issueOnProject2.key());
     assertThatSearchReturnsOnly(IssueQuery.builder().viewUuids(singletonList(application1.uuid())).projectUuids(singletonList(project1.uuid())), issueOnProject1.key(),
       issueOnFile.key());
-    assertThatSearchReturnsOnly(IssueQuery.builder().viewUuids(singletonList(application1.uuid())).fileUuids(singletonList(file.uuid())), issueOnFile.key());
+    assertThatSearchReturnsOnly(IssueQuery.builder().viewUuids(singletonList(application1.uuid())).files(singletonList(file.path())), issueOnFile.key());
     assertThatSearchReturnsEmpty(IssueQuery.builder().viewUuids(singletonList("unknown")));
   }
 
@@ -378,7 +380,7 @@ public class IssueIndexFiltersTest {
     assertThatSearchReturnsOnly(
       IssueQuery.builder().viewUuids(singletonList(branch1.uuid())).projectUuids(singletonList(project1.uuid())).branchUuid(branch1.uuid()).mainBranch(false),
       issueOnProject1.key(), issueOnFile.key());
-    assertThatSearchReturnsOnly(IssueQuery.builder().viewUuids(singletonList(branch1.uuid())).fileUuids(singletonList(file.uuid())).branchUuid(branch1.uuid()).mainBranch(false),
+    assertThatSearchReturnsOnly(IssueQuery.builder().viewUuids(singletonList(branch1.uuid())).files(singletonList(file.path())).branchUuid(branch1.uuid()).mainBranch(false),
       issueOnFile.key());
     assertThatSearchReturnsEmpty(IssueQuery.builder().branchUuid("unknown"));
   }
@@ -409,7 +411,7 @@ public class IssueIndexFiltersTest {
       IssueQuery.builder().viewUuids(singletonList(applicationBranch1.uuid())).projectUuids(singletonList(project1.uuid())).branchUuid(applicationBranch1.uuid()).mainBranch(false),
       issueOnProject1Branch1.key(), issueOnFileOnProject1Branch1.key());
     assertThatSearchReturnsOnly(
-      IssueQuery.builder().viewUuids(singletonList(applicationBranch1.uuid())).fileUuids(singletonList(fileOnProject1Branch1.uuid())).branchUuid(applicationBranch1.uuid())
+      IssueQuery.builder().viewUuids(singletonList(applicationBranch1.uuid())).files(singletonList(fileOnProject1Branch1.path())).branchUuid(applicationBranch1.uuid())
         .mainBranch(false),
       issueOnFileOnProject1Branch1.key());
     assertThatSearchReturnsEmpty(
@@ -451,6 +453,60 @@ public class IssueIndexFiltersTest {
       .createdAfterByProjectUuids(ImmutableMap.of(
         project1.uuid(), new IssueQuery.PeriodStart(addDays(now, -5), true),
         project2.uuid(), new IssueQuery.PeriodStart(addDays(now, -5), true))));
+  }
+
+  @Test
+  public void filter_by_created_after_by_project_branches() {
+    Date now = new Date();
+    OrganizationDto organizationDto = newOrganizationDto();
+
+    ComponentDto project1 = newPrivateProjectDto(organizationDto);
+    IssueDoc project1Issue1 = newDoc(project1).setFuncCreationDate(addDays(now, -10));
+    IssueDoc project1Issue2 = newDoc(project1).setFuncCreationDate(addDays(now, -20));
+
+    ComponentDto project1Branch1 = db.components().insertProjectBranch(project1);
+    IssueDoc project1Branch1Issue1 = newDoc(project1Branch1).setFuncCreationDate(addDays(now, -10));
+    IssueDoc project1Branch1Issue2 = newDoc(project1Branch1).setFuncCreationDate(addDays(now, -20));
+
+    ComponentDto project2 = newPrivateProjectDto(organizationDto);
+
+    IssueDoc project2Issue1 = newDoc(project2).setFuncCreationDate(addDays(now, -15));
+    IssueDoc project2Issue2 = newDoc(project2).setFuncCreationDate(addDays(now, -30));
+
+    ComponentDto project2Branch1 = db.components().insertProjectBranch(project2);
+    IssueDoc project2Branch1Issue1 = newDoc(project2Branch1).setFuncCreationDate(addDays(now, -15));
+    IssueDoc project2Branch1Issue2 = newDoc(project2Branch1).setFuncCreationDate(addDays(now, -30));
+
+    indexIssues(project1Issue1, project1Issue2, project2Issue1, project2Issue2,
+      project1Branch1Issue1, project1Branch1Issue2, project2Branch1Issue1, project2Branch1Issue2);
+
+    // Search for issues of project 1 branch 1 having less than 15 days
+    assertThatSearchReturnsOnly(IssueQuery.builder()
+      .mainBranch(false)
+      .createdAfterByProjectUuids(ImmutableMap.of(project1Branch1.uuid(), new IssueQuery.PeriodStart(addDays(now, -15), true))),
+      project1Branch1Issue1.key());
+
+    // Search for issues of project 1 branch 1 having less than 14 days and project 2 branch 1 having less then 25 days
+    assertThatSearchReturnsOnly(IssueQuery.builder()
+      .mainBranch(false)
+      .createdAfterByProjectUuids(ImmutableMap.of(
+        project1Branch1.uuid(), new IssueQuery.PeriodStart(addDays(now, -14), true),
+        project2Branch1.uuid(), new IssueQuery.PeriodStart(addDays(now, -25), true))),
+      project1Branch1Issue1.key(), project2Branch1Issue1.key());
+
+    // Search for issues of project 1 branch 1 having less than 30 days
+    assertThatSearchReturnsOnly(IssueQuery.builder()
+      .mainBranch(false)
+      .createdAfterByProjectUuids(ImmutableMap.of(
+        project1Branch1.uuid(), new IssueQuery.PeriodStart(addDays(now, -30), true))),
+      project1Branch1Issue1.key(), project1Branch1Issue2.key());
+
+    // Search for issues of project 1 branch 1 and project 2 branch 2 having less than 5 days
+    assertThatSearchReturnsOnly(IssueQuery.builder()
+      .mainBranch(false)
+      .createdAfterByProjectUuids(ImmutableMap.of(
+        project1Branch1.uuid(), new IssueQuery.PeriodStart(addDays(now, -5), true),
+        project2Branch1.uuid(), new IssueQuery.PeriodStart(addDays(now, -5), true))));
   }
 
   @Test
@@ -738,6 +794,58 @@ public class IssueIndexFiltersTest {
     // conflict
     query = IssueQuery.builder().organizationUuid(org1.getUuid()).projectUuids(singletonList(projectInOrg2.uuid()));
     assertThatSearchReturnsEmpty(query);
+  }
+
+  @Test
+  public void filter_by_cwe() {
+    ComponentDto project = newPrivateProjectDto(newOrganizationDto());
+    ComponentDto file = newFileDto(project, null);
+
+    indexIssues(
+      newDoc("I1", file).setType(RuleType.VULNERABILITY).setCwe(asList("20", "564", "89", "943")),
+      newDoc("I2", file).setType(RuleType.VULNERABILITY).setCwe(asList("943")),
+      newDoc("I3", file));
+
+    assertThatSearchReturnsOnly(IssueQuery.builder().cwe(asList("20")), "I1");
+  }
+
+  @Test
+  public void filter_by_owaspTop10() {
+    ComponentDto project = newPrivateProjectDto(newOrganizationDto());
+    ComponentDto file = newFileDto(project, null);
+
+    indexIssues(
+      newDoc("I1", file).setType(RuleType.VULNERABILITY).setOwaspTop10(asList("a1", "a2")),
+      newDoc("I2", file).setType(RuleType.VULNERABILITY).setCwe(singletonList("a3")),
+      newDoc("I3", file));
+
+    assertThatSearchReturnsOnly(IssueQuery.builder().owaspTop10(asList("a1")), "I1");
+  }
+
+  @Test
+  public void filter_by_sansTop25() {
+    ComponentDto project = newPrivateProjectDto(newOrganizationDto());
+    ComponentDto file = newFileDto(project, null);
+
+    indexIssues(
+      newDoc("I1", file).setType(RuleType.VULNERABILITY).setSansTop25(asList("porous-defenses", "risky-resource", "insecure-interaction")),
+      newDoc("I2", file).setType(RuleType.VULNERABILITY).setSansTop25(singletonList("porous-defenses")),
+      newDoc("I3", file));
+
+    assertThatSearchReturnsOnly(IssueQuery.builder().sansTop25(asList("risky-resource")), "I1");
+  }
+
+  @Test
+  public void filter_by_sonarSecurity() {
+    ComponentDto project = newPrivateProjectDto(newOrganizationDto());
+    ComponentDto file = newFileDto(project, null);
+
+    indexIssues(
+      newDoc("I1", file).setType(RuleType.VULNERABILITY).setSonarSourceSecurityCategory(SQCategory.BUFFER_OVERFLOW),
+      newDoc("I2", file).setType(RuleType.VULNERABILITY).setSonarSourceSecurityCategory(SQCategory.DOS),
+      newDoc("I3", file));
+
+    assertThatSearchReturnsOnly(IssueQuery.builder().sonarsourceSecurity(singletonList("buffer-overflow")), "I1");
   }
 
   private void verifyOrganizationFilter(String organizationUuid, String... expectedIssueKeys) {

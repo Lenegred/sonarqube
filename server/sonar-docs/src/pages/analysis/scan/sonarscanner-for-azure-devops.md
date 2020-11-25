@@ -3,9 +3,6 @@ title: SonarScanner for Azure DevOps
 url: /analysis/scan/sonarscanner-for-azure-devops/
 ---
 
-<!-- static -->
-<!-- update_center:scannerazure -->
-<!-- /static -->
 <update-center updatecenterkey="scannerazure"></update-center>
 
 The [SonarScanner for Azure DevOps](https://marketplace.visualstudio.com/items?itemName=SonarSource.sonarqube) makes it easy to integrate analysis into your build pipeline. The extension allows the analysis of all languages supported by SonarQube.
@@ -154,6 +151,9 @@ _Branch and Pull Request analysis are available starting in [Developer Edition](
 ### Branches
 When a build is run on a branch of your project, the extension automatically configures the analysis to be pushed to the relevant project branch in {instance}. The same build definition can apply to all your branches, whatever type of Git repository you are analyzing,
 
+[[info]]
+| If the branch to be analyzed is the **default** branch of your repository, it will be analyzed as the **master** or **main** branch of your SonarQube project. You can [rename](/branches/overview/) it in SonarQube after the first analysis.
+
 If you are working with branches on TFVC projects, you still need to manually specify the branch to be used on {instance}: in the **Prepare Analysis Configuration** task, in the **Additional Properties**, you need to set `sonar.branch.name`.
 
 ### Pull Requests
@@ -161,7 +161,7 @@ SonarQube can analyze the code of the new features and annotate your pull reques
 
 Pull request analysis is supported for any type of Git repositories. To activate it:
 
-1. Follow the instructions for activating [Pull Request Decoration for Azure DevOps](/analysis/pr-decoration/) on your SonarQube server and project
+1. Follow the instructions on the [Azure DevOps integration](/analysis/azuredevops-integration/) page for pull request decoration.
 1. In the **Branch policies** page of your main development branches (e.g. "master"), add a build policy that runs your build definition
 
 Next time some code is pushed in the branch of a pull request, the build definition will execute a scan on the code and publish the results in SonarQube which will decorate the pull request in Azure DevOps.

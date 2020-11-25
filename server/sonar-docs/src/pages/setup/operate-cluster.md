@@ -3,9 +3,9 @@ title: Configure & Operate a Cluster
 url: /setup/operate-cluster/
 ---
 
-_High Availability and cluster scalability are features of the [Data Center Edition](https://redirect.sonarsource.com/editions/datacenter.html)._
+_High availability and cluster scalability are features of the [Data Center Edition](https://redirect.sonarsource.com/editions/datacenter.html)._
 
-Once the [SonarQube cluster is installed](/setup/install-cluster/), you have a High Availability configuration that allows your SonarQube instance to stay up and running even if there is a crash or failure in one of the cluster's nodes. Your SonarQube cluster is also scalable, and you can add application nodes to increase your computing capabilities.
+Once the [SonarQube cluster is installed](/setup/install-cluster/), you have a high availability configuration that allows your SonarQube instance to stay up and running even if there is a crash or failure in one of the cluster's nodes. Your SonarQube cluster is also scalable, and you can add application nodes to increase your computing capabilities.
 
 ## Start, Stop, or Upgrade the Cluster
 
@@ -49,10 +49,11 @@ To add an Application Node:
 	```
 	...
 	sonar.cluster.enabled=true
-	sonar.cluster.hosts=ip1,ip2,ip6
-	sonar.cluster.search.hosts=ip3,ip4,ip5
-	sonar.cluster.node.host=ip6
 	sonar.cluster.node.type=application
+	sonar.cluster.node.host=ip6 
+	sonar.cluster.node.port=9003
+	sonar.cluster.hosts=ip1,ip2,ip6
+	sonar.cluster.search.hosts=ip3:9001,ip4:9001,ip5:9001
 	sonar.auth.jwtBase64Hs256Secret=YOURGENERATEDSECRET
 	...
 	```
@@ -90,50 +91,60 @@ When the [Project Move](/instance-administration/project-move/) feature is used 
 * The archive of the exported projects must be copied to all the applications nodes in the target server
 
 ## Configuration details
-Start with the [default configuration](/setup/install-cluster/); it's good in most cases. The details below are only needed in specific cases.
+There are three TCP networks to configure: 
 
-[Hazelcast](https://hazelcast.org/) is used to manage the communication between the nodes of the cluster. You don't need to install it yourself, it's provided out of the box.
+- the network of application nodes that relies on Hazelcast.
+- the network used for Elasticsearch internal communication between search nodes (`es` properties).
+- the network between application nodes and search nodes (`search` properties).
+
+[Hazelcast](https://hazelcast.org/) is used to manage the communication between the cluster's application nodes. You don't need to install it yourself, it's provided out of the box.
 
 The following properties may be defined in the _$SONARQUBE-HOME/conf/sonar.properties_ file of each node in a cluster. When defining a property that contains a list of hosts (`*.hosts`) the port is not required if the default port was not overridden in the configuration.
+
+[[warning]]
+| Ports can be unintentionally exposed. We recommend only giving external access to the application nodes and to main port (`sonar.web.port`).
 
 ### All nodes
 Property | Description | Default | Required | 
 ---|---|---|---|
 `sonar.cluster.enabled`|Set to `true` in each node to activate the cluster mode|`false`|yes
 `sonar.cluster.name`|The name of the cluster. **Required if multiple clusters are present on the same network.** For example this prevents mixing Production and Preproduction clusters. This will be the name stored in the Hazelcast cluster and used as the name of the Elasticsearch cluster.|`sonarqube`|no
-`sonar.cluster.search.hosts`|Comma-delimited list of search hosts in the cluster. Each item in the list must contain the port if the default `sonar.search.port` value is not used. Item format is `sonar.search.host` or `sonar.search.host:sonar.search.port`.| |yes
 `sonar.cluster.node.name`|The name of the node that is used on Elasticsearch and stored in Hazelcast member attribute (NODE_NAME) for sonar-application|`sonarqube-{UUID}`|no
 `sonar.cluster.node.type`|Type of node: either `application` or `search`| |yes
-`sonar.cluster.node.host`|IP address of the network card that will be used by Hazelcast to communicate with the members of the cluster| |yes
-
 
 ### Application nodes
 Property  | Description | Required 
 ---|---|---|---
 `sonar.cluster.hosts`|Comma-delimited list of all **application** hosts in the cluster. This value must contain **only application hosts**. Each item in the list must contain the port if the default `sonar.cluster.node.port` value is not used. Item format is `sonar.cluster.node.host` or `sonar.cluster.node.host:sonar.cluster.node.port`.|yes
 `sonar.cluster.node.port`|The Hazelcast port for communication with each application member of the cluster. Default: `9003`|no|
-`sonar.cluster.node.web.port`|Hazelcast port for communication with the WebServer process. Port must be accessible to all other search and application nodes. If not specified, a dynamic port will be chosen and all ports must be open among the nodes.|no
-`sonar.cluster.node.ce.port`|Hazelcast port for communication with the ComputeEngine process. Port must be accessible to all other search and application nodes. If not specified, a dynamic port will be chosen and all ports must be open among the nodes.|no
+`sonar.cluster.node.web.port`|The Hazelcast port for communication with the WebServer process. Port must be accessible to all other application nodes. If not specified, a dynamic port will be chosen and all ports must be open among the nodes.|no
+`sonar.cluster.node.ce.port`|The Hazelcast port for communication with the ComputeEngine process. Port must be accessible to all other application nodes. If not specified, a dynamic port will be chosen and all ports must be open among the nodes.|no
+`sonar.cluster.search.hosts`|Comma-delimited list of search hosts in the cluster. The list can contain either the host or the host and port, but not both. The item format is `sonar.cluster.node.search.host` for host only or`sonar.cluster.node.search.host:sonar.cluster.node.search.port` for host and port.| yes
 `sonar.auth.jwtBase64Hs256Secret`|Required for authentication with multiple web servers. It is used to keep user sessions opened when they are redirected from one web server to another by the load balancer. See _$SONARQUBE-HOME/conf/sonar.properties_) for details about how to generate this secret key.| yes
 
 ### Search nodes
 Property  | Description | Default | Required 
 ---|---|---|---
-`sonar.search.host`|Listening IP. IP must be accessible to all other search and application nodes.|`127.0.0.1`|yes
-`sonar.search.port`|Listening port. Port must be accessible to all other search and application nodes.|`9001`|yes
+`sonar.cluster.node.search.host`|Elasticsearch host of the current node used for HTTP communication between search and application nodes. IP must be accessible to all application nodes.|`127.0.0.1`|yes
+`sonar.cluster.node.search.port`|Elasticsearch port of the current node used for HTTP communication between search and application nodes. Port must be accessible to all application nodes.|`9001`|yes
+`sonar.cluster.es.hosts`|Comma-delimited list of search hosts in the cluster. The list can contain either the host or the host and port but not both. The item format is `sonar.cluster.node.es.host` for host only or`sonar.cluster.node.es.host:sonar.cluster.node.es.port` for host and port.| |yes
+`sonar.cluster.node.es.host`|Elasticsearch host of the current node used by Elasticsearch internal communication to form a cluster (TCP transport).|localhost|yes
+`sonar.cluster.node.es.port`|Elasticsearch port of the current node used by Elasticsearch internal communication to form a cluster (TCP transport). Port must be accessible to all other search nodes|9002| yes
 `sonar.search.initialStateTimeout`|The timeout for the Elasticsearch nodes to elect a master node. The default value will be fine in most cases, but in a situation where startup is failing because of a timeout, this may need to be adjusted. The value must be set in the format: `{integer}{timeunit}`. Valid `{timeunit}` values are: `ms` (milliseconds); `s` (seconds); `m` (minutes); `h` (hours); `d` (days); `w` (weeks)|cluster: 120s; standalone: 30s|no
 
 ## Limitations
 * Cluster downtime is required for SonarQube upgrades or plugin installations.
-* All application nodes must be stopped when installing, uninstalling or upgrading a plugin.
-* Plugins are not shared, it means if you install/uninstall/upgrade a given plugin in one application node, you need to perform the same actions on the other application node.
+* All application nodes must be stopped when installing, uninstalling, or upgrading a plugin.
+* Plugins are not shared, meaning if you install/uninstall/upgrade a given plugin on one application node, you need to perform the same actions on the other application node.
 * There is no way to perform actions on the cluster from a central app - all operations must be done manually on each node of the cluster.
 
-
 ## Frequently Asked Questions
+
 ### Does Elasticsearch discover automatically other ES nodes? 
 No. Multicast is disabled. All hosts (IP+port) must be listed.
+
 ### Can different nodes run on the same machine? 
-Yes, but the best is to have 5 machines to be really resilient to failures.
+Yes, but it's best to have one machine for each node to be resilient to failures. To maintain an even higher level of availability, each of your three search nodes can be located in a separate availability zone *within the same region*.
+
 ### Can the members of a cluster be discovered automatically? 
 No, all nodes must be configured in _$SONARQUBE-HOME/conf/sonar.properties_

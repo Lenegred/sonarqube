@@ -32,9 +32,12 @@ import java.util.Map;
 import java.util.Scanner;
 import javax.annotation.CheckForNull;
 import javax.swing.*;
-import javax.swing.UIManager.*;
-import javax.swing.event.*;
-import javax.swing.tree.*;
+import javax.swing.UIManager.LookAndFeelInfo;
+import javax.swing.event.TreeSelectionEvent;
+import javax.swing.event.TreeSelectionListener;
+import javax.swing.tree.DefaultMutableTreeNode;
+import javax.swing.tree.DefaultTreeModel;
+import javax.swing.tree.TreeSelectionModel;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.StringUtils;
 import org.sonar.core.util.CloseableIterator;
@@ -94,6 +97,8 @@ public class ScannerReportViewerApp {
   private JEditorPane cpdTextBlocksEditor;
   private JScrollPane significantCodeTab;
   private JEditorPane significantCodeEditor;
+  private JScrollPane metadataTab;
+  private JEditorPane metadataEditor;
 
   /**
    * Create the application.
@@ -187,6 +192,7 @@ public class ScannerReportViewerApp {
     updateAdHocRules();
     updateQualityProfiles();
     updatePlugins();
+    updateMetadata();
   }
 
   private void loadComponents() {
@@ -255,7 +261,7 @@ public class ScannerReportViewerApp {
       try (CloseableIterator<ScannerReport.CpdTextBlock> it = reader.readCpdTextBlocks(component.getRef())) {
         while (it.hasNext()) {
           ScannerReport.CpdTextBlock textBlock = it.next();
-          cpdTextBlocksEditor.getDocument().insertString(cpdTextBlocksEditor.getDocument().getEndPosition().getOffset(), textBlock + "\n", null);
+          cpdTextBlocksEditor.getDocument().insertString(cpdTextBlocksEditor.getDocument().getLength(), textBlock + "\n", null);
         }
       } catch (Exception e) {
         throw new IllegalStateException("Can't read CPD text blocks for " + getNodeName(component), e);
@@ -270,7 +276,7 @@ public class ScannerReportViewerApp {
         if (it != null) {
           while (it.hasNext()) {
             ScannerReport.LineSgnificantCode textBlock = it.next();
-            significantCodeEditor.getDocument().insertString(significantCodeEditor.getDocument().getEndPosition().getOffset(), textBlock + "\n", null);
+            significantCodeEditor.getDocument().insertString(significantCodeEditor.getDocument().getLength(), textBlock + "\n", null);
           }
         }
       } catch (Exception e) {
@@ -285,7 +291,7 @@ public class ScannerReportViewerApp {
       try (CloseableIterator<ScannerReport.Duplication> it = reader.readComponentDuplications(component.getRef())) {
         while (it.hasNext()) {
           ScannerReport.Duplication dup = it.next();
-          duplicationEditor.getDocument().insertString(duplicationEditor.getDocument().getEndPosition().getOffset(), dup + "\n", null);
+          duplicationEditor.getDocument().insertString(duplicationEditor.getDocument().getLength(), dup + "\n", null);
         }
       } catch (Exception e) {
         throw new IllegalStateException("Can't read duplications for " + getNodeName(component), e);
@@ -298,7 +304,7 @@ public class ScannerReportViewerApp {
     try (CloseableIterator<Issue> it = reader.readComponentIssues(component.getRef())) {
       while (it.hasNext()) {
         Issue issue = it.next();
-        int offset = issuesEditor.getDocument().getEndPosition().getOffset();
+        int offset = issuesEditor.getDocument().getLength();
         issuesEditor.getDocument().insertString(offset, issue.toString(), null);
       }
     } catch (Exception e) {
@@ -311,7 +317,7 @@ public class ScannerReportViewerApp {
     try (CloseableIterator<ScannerReport.ExternalIssue> it = reader.readComponentExternalIssues(component.getRef())) {
       while (it.hasNext()) {
         ScannerReport.ExternalIssue issue = it.next();
-        int offset = externalIssuesEditor.getDocument().getEndPosition().getOffset();
+        int offset = externalIssuesEditor.getDocument().getLength();
         externalIssuesEditor.getDocument().insertString(offset, issue.toString(), null);
       }
     } catch (Exception e) {
@@ -324,7 +330,7 @@ public class ScannerReportViewerApp {
     try (CloseableIterator<ScannerReport.LineCoverage> it = reader.readComponentCoverage(component.getRef())) {
       while (it.hasNext()) {
         ScannerReport.LineCoverage coverage = it.next();
-        coverageEditor.getDocument().insertString(coverageEditor.getDocument().getEndPosition().getOffset(), coverage + "\n", null);
+        coverageEditor.getDocument().insertString(coverageEditor.getDocument().getLength(), coverage + "\n", null);
       }
     } catch (Exception e) {
       throw new IllegalStateException("Can't read code coverage for " + getNodeName(component), e);
@@ -346,6 +352,21 @@ public class ScannerReportViewerApp {
         sourceEditor.setText(errors.toString());
       }
     }
+  }
+
+  private void updateMetadata() {
+    metadataEditor.setText("");
+
+    StringBuilder builder = new StringBuilder();
+    Metadata data = reader.readMetadata();
+    builder.append("Project key: ").append(data.getProjectKey()).append("\n");
+    builder.append("Project version: ").append(data.getProjectVersion()).append("\n");
+    builder.append("Scm revision ID: ").append(data.getScmRevisionId()).append("\n");
+    if (data.getNotAnalyzedFilesByLanguageCount() > 0) {
+      builder.append("Not analyzed files in project:").append("\n");
+      data.getNotAnalyzedFilesByLanguageMap().forEach((key, value) -> builder.append("   ").append(key).append(": ").append(value).append("\n"));
+    }
+    metadataEditor.setText(builder.toString());
   }
 
   private void updateActiveRules() {
@@ -399,7 +420,8 @@ public class ScannerReportViewerApp {
     try (CloseableIterator<ScannerReport.SyntaxHighlightingRule> it = reader.readComponentSyntaxHighlighting(component.getRef())) {
       while (it.hasNext()) {
         ScannerReport.SyntaxHighlightingRule rule = it.next();
-        highlightingEditor.getDocument().insertString(highlightingEditor.getDocument().getEndPosition().getOffset(), rule + "\n", null);
+        int offset = highlightingEditor.getDocument().getLength();
+        highlightingEditor.getDocument().insertString(offset, rule + "\n", null);
       }
     } catch (Exception e) {
       throw new IllegalStateException("Can't read syntax highlighting for " + getNodeName(component), e);
@@ -411,7 +433,7 @@ public class ScannerReportViewerApp {
     try (CloseableIterator<ScannerReport.Measure> it = reader.readComponentMeasures(component.getRef())) {
       while (it.hasNext()) {
         ScannerReport.Measure measure = it.next();
-        measuresEditor.getDocument().insertString(measuresEditor.getDocument().getEndPosition().getOffset(), measure + "\n", null);
+        measuresEditor.getDocument().insertString(measuresEditor.getDocument().getLength(), measure + "\n", null);
       }
     } catch (Exception e) {
       throw new IllegalStateException("Can't read measures for " + getNodeName(component), e);
@@ -428,15 +450,15 @@ public class ScannerReportViewerApp {
     try {
       int index = 0;
       for (Changeset changeset : changesets.getChangesetList()) {
-        scmEditor.getDocument().insertString(scmEditor.getDocument().getEndPosition().getOffset(), index + "\n", null);
-        scmEditor.getDocument().insertString(scmEditor.getDocument().getEndPosition().getOffset(), changeset + "\n", null);
+        scmEditor.getDocument().insertString(scmEditor.getDocument().getLength(), index + "\n", null);
+        scmEditor.getDocument().insertString(scmEditor.getDocument().getLength(), changeset + "\n", null);
         index++;
       }
 
-      scmEditor.getDocument().insertString(scmEditor.getDocument().getEndPosition().getOffset(), "\n", null);
+      scmEditor.getDocument().insertString(scmEditor.getDocument().getLength(), "\n", null);
       int line = 1;
       for (Integer idx : changesetIndexByLine) {
-        scmEditor.getDocument().insertString(scmEditor.getDocument().getEndPosition().getOffset(), line + ": " + idx + "\n", null);
+        scmEditor.getDocument().insertString(scmEditor.getDocument().getLength(), line + ": " + idx + "\n", null);
         line++;
       }
 
@@ -450,7 +472,7 @@ public class ScannerReportViewerApp {
     try (CloseableIterator<ScannerReport.Symbol> it = reader.readComponentSymbols(component.getRef())) {
       while (it.hasNext()) {
         ScannerReport.Symbol symbol = it.next();
-        symbolEditor.getDocument().insertString(symbolEditor.getDocument().getEndPosition().getOffset(), symbol + "\n", null);
+        symbolEditor.getDocument().insertString(symbolEditor.getDocument().getLength(), symbol + "\n", null);
       }
     } catch (Exception e) {
       throw new IllegalStateException("Can't read symbol references for " + getNodeName(component), e);
@@ -586,6 +608,12 @@ public class ScannerReportViewerApp {
 
     significantCodeEditor = new JEditorPane();
     significantCodeTab.setViewportView(significantCodeEditor);
+
+    metadataTab = new JScrollPane();
+    tabbedPane.addTab("Metadata", null, metadataTab, null);
+
+    metadataEditor = new JEditorPane();
+    metadataTab.setViewportView(metadataEditor);
 
     treeScrollPane = new JScrollPane();
     treeScrollPane.setPreferredSize(new Dimension(200, 400));

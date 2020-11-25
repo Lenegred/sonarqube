@@ -21,7 +21,7 @@ package org.sonar.server.permission;
 
 import org.junit.Test;
 import org.sonar.db.component.ResourceTypesRule;
-import org.sonar.db.permission.OrganizationPermission;
+import org.sonar.db.permission.GlobalPermission;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -32,8 +32,8 @@ public class PermissionServiceImplTest {
 
   @Test
   public void organizationPermissions_must_be_ordered() {
-    assertThat(underTest.getAllOrganizationPermissions())
-      .extracting(OrganizationPermission::getKey)
+    assertThat(underTest.getGlobalPermissions())
+      .extracting(GlobalPermission::getKey)
       .containsExactly("admin", "gateadmin", "profileadmin", "provisioning", "scan", "applicationcreator", "portfoliocreator");
   }
 

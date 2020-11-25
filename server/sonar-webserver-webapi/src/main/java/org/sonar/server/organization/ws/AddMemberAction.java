@@ -26,7 +26,7 @@ import org.sonar.api.server.ws.WebService.NewController;
 import org.sonar.db.DbClient;
 import org.sonar.db.DbSession;
 import org.sonar.db.organization.OrganizationDto;
-import org.sonar.db.permission.OrganizationPermission;
+import org.sonar.db.permission.GlobalPermission;
 import org.sonar.db.user.GroupMembershipQuery;
 import org.sonar.db.user.UserDto;
 import org.sonar.server.issue.AvatarResolver;
@@ -38,11 +38,11 @@ import org.sonarqube.ws.Organizations.User;
 import static com.google.common.base.Strings.emptyToNull;
 import static java.util.Optional.ofNullable;
 import static org.sonar.db.user.GroupMembershipQuery.IN;
+import static org.sonar.server.exceptions.NotFoundException.checkFound;
+import static org.sonar.server.exceptions.NotFoundException.checkFoundWithOptional;
 import static org.sonar.server.organization.ws.OrganizationsWsSupport.PARAM_LOGIN;
 import static org.sonar.server.organization.ws.OrganizationsWsSupport.PARAM_ORGANIZATION;
 import static org.sonar.server.ws.KeyExamples.KEY_ORG_EXAMPLE_001;
-import static org.sonar.server.exceptions.NotFoundException.checkFound;
-import static org.sonar.server.exceptions.NotFoundException.checkFoundWithOptional;
 import static org.sonar.server.ws.WsUtils.writeProtobuf;
 
 public class AddMemberAction implements OrganizationsWsAction {
@@ -93,15 +93,12 @@ public class AddMemberAction implements OrganizationsWsAction {
     try (DbSession dbSession = dbClient.openSession(false)) {
       OrganizationDto organization = checkFoundWithOptional(dbClient.organizationDao().selectByKey(dbSession, organizationKey), "Organization '%s' is not found",
         organizationKey);
-      userSession.checkPermission(OrganizationPermission.ADMINISTER, organization);
+      userSession.checkPermission(GlobalPermission.ADMINISTER);
       wsSupport.checkMemberSyncIsDisabled(dbSession, organization);
       UserDto user = checkFound(dbClient.userDao().selectByLogin(dbSession, login), "User '%s' is not found", login);
       memberUpdater.addMember(dbSession, organization, user);
 
-      int groups = dbClient.groupMembershipDao().countGroups(dbSession, GroupMembershipQuery.builder()
-        .organizationUuid(organization.getUuid())
-        .membership(IN)
-        .build(), user.getUuid());
+      int groups = dbClient.groupMembershipDao().countGroups(dbSession, GroupMembershipQuery.builder().membership(IN).build(), user.getUuid());
       AddMemberWsResponse wsResponse = buildResponse(user, groups);
       writeProtobuf(wsResponse, request, response);
     }

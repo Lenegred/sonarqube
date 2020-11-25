@@ -47,13 +47,14 @@ import org.sonar.core.util.Uuids;
 import org.sonar.db.DbClient;
 import org.sonar.db.DbSession;
 import org.sonar.db.DbTester;
-import org.sonar.db.alm.ALM;
+import org.sonar.db.alm.setting.AlmSettingDto;
 import org.sonar.db.ce.CeActivityDto;
 import org.sonar.db.ce.CeQueueDto;
 import org.sonar.db.ce.CeQueueDto.Status;
 import org.sonar.db.ce.CeTaskCharacteristicDto;
 import org.sonar.db.ce.CeTaskInputDao;
 import org.sonar.db.ce.CeTaskMessageDto;
+import org.sonar.db.ce.CeTaskMessageType;
 import org.sonar.db.ce.CeTaskTypes;
 import org.sonar.db.component.BranchDto;
 import org.sonar.db.component.BranchType;
@@ -77,6 +78,8 @@ import org.sonar.db.project.ProjectDto;
 import org.sonar.db.property.PropertyDto;
 import org.sonar.db.rule.RuleDefinitionDto;
 import org.sonar.db.source.FileSourceDto;
+import org.sonar.db.user.UserDismissedMessageDto;
+import org.sonar.db.user.UserDto;
 import org.sonar.db.webhook.WebhookDeliveryLiteDto;
 import org.sonar.db.webhook.WebhookDto;
 
@@ -109,16 +112,16 @@ public class PurgeDaoTest {
 
   private static final String PROJECT_UUID = "P1";
 
-  private System2 system2 = mock(System2.class);
+  private final System2 system2 = mock(System2.class);
 
   @Rule
   public DbTester db = DbTester.create(system2);
   @Rule
   public ExpectedException expectedException = ExpectedException.none();
 
-  private DbClient dbClient = db.getDbClient();
-  private DbSession dbSession = db.getSession();
-  private PurgeDao underTest = db.getDbClient().purgeDao();
+  private final DbClient dbClient = db.getDbClient();
+  private final DbSession dbSession = db.getSession();
+  private final PurgeDao underTest = db.getDbClient().purgeDao();
 
   @Test
   public void purge_failed_ce_tasks() {
@@ -140,16 +143,22 @@ public class PurgeDaoTest {
     ComponentDto project = db.components().insertPublicProject();
     ComponentDto branch1 = db.components().insertProjectBranch(project);
     ComponentDto branch2 = db.components().insertProjectBranch(project, b -> b.setBranchType(BranchType.BRANCH));
+    db.components().insertSnapshot(branch1);
+    db.components().insertSnapshot(branch2);
 
-    // branch with other components and issues, updated 31 days ago
-    when(system2.now()).thenReturn(DateUtils.addDays(new Date(), -31).getTime());
+    // branch with other components and issues, last analysed 31 days ago
     ComponentDto branch3 = db.components().insertProjectBranch(project, b -> b.setBranchType(BranchType.BRANCH));
+    db.components().insertSnapshot(branch3, dto -> dto.setCreatedAt(DateUtils.addDays(new Date(), -31).getTime()));
+
     ComponentDto module = db.components().insertComponent(newModuleDto(branch3));
     ComponentDto subModule = db.components().insertComponent(newModuleDto(module));
     ComponentDto file = db.components().insertComponent(newFileDto(subModule));
     db.issues().insert(rule, branch3, file);
     db.issues().insert(rule, branch3, subModule);
     db.issues().insert(rule, branch3, module);
+
+    // branch with no analysis
+    ComponentDto branch4 = db.components().insertProjectBranch(project, b -> b.setBranchType(BranchType.BRANCH));
 
     underTest.purge(dbSession, newConfigurationWith30Days(System2.INSTANCE, project.uuid(), project.uuid()), PurgeListener.EMPTY, new PurgeProfiler());
     dbSession.commit();
@@ -160,15 +169,16 @@ public class PurgeDaoTest {
 
   @Test
   public void purge_inactive_pull_request() {
-    when(system2.now()).thenReturn(new Date().getTime());
     RuleDefinitionDto rule = db.rules().insert();
     ComponentDto project = db.components().insertPublicProject();
     ComponentDto nonMainBranch = db.components().insertProjectBranch(project);
+    db.components().insertSnapshot(nonMainBranch);
     ComponentDto recentPullRequest = db.components().insertProjectBranch(project, b -> b.setBranchType(BranchType.PULL_REQUEST));
+    db.components().insertSnapshot(recentPullRequest);
 
     // pull request with other components and issues, updated 31 days ago
-    when(system2.now()).thenReturn(DateUtils.addDays(new Date(), -31).getTime());
     ComponentDto pullRequest = db.components().insertProjectBranch(project, b -> b.setBranchType(BranchType.PULL_REQUEST));
+    db.components().insertSnapshot(pullRequest, dto -> dto.setCreatedAt(DateUtils.addDays(new Date(), -31).getTime()));
     ComponentDto module = db.components().insertComponent(newModuleDto(pullRequest));
     ComponentDto subModule = db.components().insertComponent(newModuleDto(module));
     ComponentDto file = db.components().insertComponent(newFileDto(subModule));
@@ -185,25 +195,23 @@ public class PurgeDaoTest {
 
   @Test
   public void purge_inactive_branches_when_analyzing_non_main_branch() {
-    when(system2.now()).thenReturn(new Date().getTime());
     RuleDefinitionDto rule = db.rules().insert();
     ComponentDto project = db.components().insertPublicProject();
     ComponentDto nonMainBranch = db.components().insertProjectBranch(project);
-
-    when(system2.now()).thenReturn(DateUtils.addDays(new Date(), -31).getTime());
+    db.components().insertSnapshot(nonMainBranch);
 
     // branch updated 31 days ago
     ComponentDto branch1 = db.components().insertProjectBranch(project, b -> b.setBranchType(BranchType.BRANCH));
+    db.components().insertSnapshot(branch1, dto -> dto.setCreatedAt(DateUtils.addDays(new Date(), -31).getTime()));
 
     // branch with other components and issues, updated 31 days ago
     ComponentDto branch2 = db.components().insertProjectBranch(project, b -> b.setBranchType(BranchType.PULL_REQUEST));
+    db.components().insertSnapshot(branch2, dto -> dto.setCreatedAt(DateUtils.addDays(new Date(), -31).getTime()));
     ComponentDto file = db.components().insertComponent(newFileDto(branch2));
     db.issues().insert(rule, branch2, file);
 
-    // back to present
-    when(system2.now()).thenReturn(new Date().getTime());
     // analysing branch1
-    underTest.purge(dbSession, newConfigurationWith30Days(system2, branch1.uuid(), branch1.getMainBranchProjectUuid()), PurgeListener.EMPTY, new PurgeProfiler());
+    underTest.purge(dbSession, newConfigurationWith30Days(System2.INSTANCE, branch1.uuid(), branch1.getMainBranchProjectUuid()), PurgeListener.EMPTY, new PurgeProfiler());
     dbSession.commit();
 
     // branch1 wasn't deleted since it was being analyzed!
@@ -335,7 +343,7 @@ public class PurgeDaoTest {
     // note: projectEvent3 has no component change
 
     // delete non existing analysis has no effect
-    underTest.deleteAnalyses(dbSession, new PurgeProfiler(), singletonList( "foo"));
+    underTest.deleteAnalyses(dbSession, new PurgeProfiler(), singletonList("foo"));
     assertThat(uuidsIn("event_component_changes", "event_analysis_uuid"))
       .containsOnly(projectAnalysis1.getUuid(), projectAnalysis2.getUuid());
     assertThat(db.countRowsOfTable("event_component_changes"))
@@ -694,6 +702,25 @@ public class PurgeDaoTest {
 
     assertThat(uuidsIn("ce_activity")).containsOnly(anotherProjectTask.getUuid());
     assertThat(taskUuidsIn("ce_task_message")).containsOnly(anotherProjectTask.getUuid(), "non existing task");
+  }
+
+  @Test
+  public void delete_rows_in_user_dismissed_messages_when_deleting_project() {
+    UserDto user1 = db.users().insertUser();
+    UserDto user2 = db.users().insertUser();
+    ProjectDto project = db.components().insertPrivateProjectDto();
+    ProjectDto anotherProject = db.components().insertPrivateProjectDto();
+
+    UserDismissedMessageDto msg1 = db.users().insertUserDismissedMessage(user1, project, CeTaskMessageType.SUGGEST_DEVELOPER_EDITION_UPGRADE);
+    UserDismissedMessageDto msg2 = db.users().insertUserDismissedMessage(user2, project, CeTaskMessageType.SUGGEST_DEVELOPER_EDITION_UPGRADE);
+    UserDismissedMessageDto msg3 = db.users().insertUserDismissedMessage(user1, anotherProject, CeTaskMessageType.SUGGEST_DEVELOPER_EDITION_UPGRADE);
+
+    assertThat(uuidsIn("user_dismissed_messages")).containsOnly(msg1.getUuid(), msg2.getUuid(), msg3.getUuid());
+
+    underTest.deleteProject(dbSession, project.getUuid());
+    dbSession.commit();
+
+    assertThat(uuidsIn("user_dismissed_messages")).containsOnly(msg3.getUuid());
   }
 
   @Test
@@ -1221,20 +1248,17 @@ public class PurgeDaoTest {
   }
 
   @Test
-  public void deleteProject_deletes_project_alm_bindings() {
-    ALM alm = ALM.GITHUB;
-    String repoId = "123";
-    String otherRepoId = repoId + "-foo";
+  public void deleteProject_deletes_project_alm_settings() {
+    ProjectDto project = db.components().insertPublicProjectDto();
+    ProjectDto otherProject = db.components().insertPublicProjectDto();
+    AlmSettingDto almSettingDto = db.almSettings().insertGitlabAlmSetting();
+    db.almSettings().insertGitlabProjectAlmSetting(almSettingDto, project);
+    db.almSettings().insertGitlabProjectAlmSetting(almSettingDto, otherProject);
 
-    ComponentDto project = db.components().insertPublicProject();
-    ComponentDto otherProject = db.components().insertPublicProject();
-    dbClient.projectAlmBindingsDao().insertOrUpdate(dbSession, alm, repoId, project.uuid(), null, "foo");
-    dbClient.projectAlmBindingsDao().insertOrUpdate(dbSession, alm, otherRepoId, otherProject.uuid(), null, "bar");
+    underTest.deleteProject(dbSession, project.getUuid());
 
-    underTest.deleteProject(dbSession, project.uuid());
-
-    assertThat(dbClient.projectAlmBindingsDao().findProjectKey(dbSession, alm, repoId)).isEmpty();
-    assertThat(dbClient.projectAlmBindingsDao().findProjectKey(dbSession, alm, otherRepoId)).isNotEmpty();
+    assertThat(dbClient.projectAlmSettingDao().selectByProject(dbSession, project)).isEmpty();
+    assertThat(dbClient.projectAlmSettingDao().selectByProject(dbSession, otherProject)).isNotEmpty();
   }
 
   @Test
@@ -1626,6 +1650,7 @@ public class PurgeDaoTest {
         .setUuid(UuidFactoryFast.getInstance().create())
         .setTaskUuid(uuid)
         .setMessage("key_" + uuid.hashCode() + i)
+        .setType(CeTaskMessageType.GENERIC)
         .setCreatedAt(2_333_444L + i))
       .forEach(dto -> dbClient.ceTaskMessageDao().insert(dbSession, dto));
     dbSession.commit();

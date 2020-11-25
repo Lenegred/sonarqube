@@ -42,7 +42,6 @@ import FiltersHeader from '../../../components/common/FiltersHeader';
 import ScreenPositionHelper from '../../../components/common/ScreenPositionHelper';
 import '../../../components/search-navigator.css';
 import { hasPrivateAccess } from '../../../helpers/organizations';
-import { isSonarCloud } from '../../../helpers/system';
 import { isLoggedIn } from '../../../helpers/users';
 import {
   getAppState,
@@ -51,6 +50,7 @@ import {
   getMyOrganizations,
   Store
 } from '../../../store/rootReducer';
+import { SecurityStandard } from '../../../types/security';
 import {
   shouldOpenSonarSourceSecurityFacet,
   shouldOpenStandardsChildFacet,
@@ -81,6 +81,7 @@ import RuleDetails from './RuleDetails';
 import RuleListItem from './RuleListItem';
 
 const PAGE_SIZE = 100;
+const MAX_SEARCH_LENGTH = 200;
 const LIMIT_BEFORE_LOAD_MORE = 5;
 
 interface StateToProps {
@@ -122,8 +123,8 @@ export class App extends React.PureComponent<Props, State> {
       loading: true,
       openFacets: {
         languages: true,
-        owaspTop10: shouldOpenStandardsChildFacet({}, query, 'owaspTop10'),
-        sansTop25: shouldOpenStandardsChildFacet({}, query, 'sansTop25'),
+        owaspTop10: shouldOpenStandardsChildFacet({}, query, SecurityStandard.OWASP_TOP10),
+        sansTop25: shouldOpenStandardsChildFacet({}, query, SecurityStandard.SANS_TOP25),
         sonarsourceSecurity: shouldOpenSonarSourceSecurityFacet({}, query),
         standards: shouldOpenStandardsFacet({}, query),
         types: true
@@ -552,7 +553,7 @@ export class App extends React.PureComponent<Props, State> {
     const { canWrite, paging, query, referencedProfiles } = this.state;
     const organization = this.props.organization && this.props.organization.key;
 
-    if (!isLoggedIn(currentUser) || (isSonarCloud() && !organization) || !canWrite) {
+    if (!isLoggedIn(currentUser) || !canWrite) {
       return null;
     }
 
@@ -600,6 +601,7 @@ export class App extends React.PureComponent<Props, State> {
                     <SearchBox
                       className="spacer-bottom"
                       id="coding-rules-search"
+                      maxLength={MAX_SEARCH_LENGTH}
                       minLength={2}
                       onChange={this.handleSearch}
                       placeholder={translate('search.search_for_rules')}
@@ -664,7 +666,6 @@ export class App extends React.PureComponent<Props, State> {
                   onDeactivate={this.handleRuleDeactivate}
                   onDelete={this.handleRuleDelete}
                   onFilterChange={this.handleFilterChange}
-                  organization={organization}
                   referencedProfiles={this.state.referencedProfiles}
                   referencedRepositories={this.state.referencedRepositories}
                   ruleKey={this.state.openRule.key}

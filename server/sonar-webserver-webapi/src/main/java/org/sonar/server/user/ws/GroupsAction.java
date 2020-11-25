@@ -20,7 +20,6 @@
 package org.sonar.server.user.ws;
 
 import java.util.List;
-import java.util.Optional;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
 import org.sonar.api.server.ws.Change;
@@ -32,13 +31,11 @@ import org.sonar.api.server.ws.WebService.SelectionMode;
 import org.sonar.api.utils.Paging;
 import org.sonar.db.DbClient;
 import org.sonar.db.DbSession;
-import org.sonar.db.organization.OrganizationDto;
-import org.sonar.db.permission.OrganizationPermission;
+import org.sonar.db.permission.GlobalPermission;
 import org.sonar.db.user.GroupDto;
 import org.sonar.db.user.GroupMembershipDto;
 import org.sonar.db.user.GroupMembershipQuery;
 import org.sonar.db.user.UserDto;
-import org.sonar.server.organization.DefaultOrganizationProvider;
 import org.sonar.server.user.UserSession;
 import org.sonar.server.usergroups.DefaultGroupFinder;
 import org.sonarqube.ws.Users.GroupsWsResponse;
@@ -53,10 +50,8 @@ import static org.sonar.api.server.ws.WebService.Param.SELECTED;
 import static org.sonar.api.server.ws.WebService.Param.TEXT_QUERY;
 import static org.sonar.api.utils.Paging.forPageIndex;
 import static org.sonar.server.exceptions.NotFoundException.checkFound;
-import static org.sonar.server.exceptions.NotFoundException.checkFoundWithOptional;
 import static org.sonar.server.ws.WsUtils.writeProtobuf;
 import static org.sonarqube.ws.client.user.UsersWsParameters.PARAM_LOGIN;
-import static org.sonarqube.ws.client.user.UsersWsParameters.PARAM_ORGANIZATION;
 
 public class GroupsAction implements UsersWsAction {
 
@@ -64,13 +59,11 @@ public class GroupsAction implements UsersWsAction {
 
   private final DbClient dbClient;
   private final UserSession userSession;
-  private final DefaultOrganizationProvider defaultOrganizationProvider;
   private final DefaultGroupFinder defaultGroupFinder;
 
-  public GroupsAction(DbClient dbClient, UserSession userSession, DefaultOrganizationProvider defaultOrganizationProvider, DefaultGroupFinder defaultGroupFinder) {
+  public GroupsAction(DbClient dbClient, UserSession userSession, DefaultGroupFinder defaultGroupFinder) {
     this.dbClient = dbClient;
     this.userSession = userSession;
-    this.defaultOrganizationProvider = defaultOrganizationProvider;
     this.defaultGroupFinder = defaultGroupFinder;
   }
 
@@ -92,12 +85,6 @@ public class GroupsAction implements UsersWsAction {
       .setDescription("A user login")
       .setExampleValue("admin")
       .setRequired(true);
-
-    action.createParam(PARAM_ORGANIZATION)
-      .setDescription("Organization key")
-      .setExampleValue("my-org")
-      .setInternal(true)
-      .setSince("6.4");
   }
 
   @Override
@@ -109,12 +96,10 @@ public class GroupsAction implements UsersWsAction {
   private GroupsWsResponse doHandle(GroupsRequest request) {
 
     try (DbSession dbSession = dbClient.openSession(false)) {
-      OrganizationDto organization = findOrganizationByKey(dbSession, request.getOrganization());
-      userSession.checkPermission(OrganizationPermission.ADMINISTER, organization);
+      userSession.checkPermission(GlobalPermission.ADMINISTER);
 
       String login = request.getLogin();
       GroupMembershipQuery query = GroupMembershipQuery.builder()
-        .organizationUuid(organization.getUuid())
         .groupSearch(request.getQuery())
         .membership(getMembership(request.getSelected()))
         .pageIndex(request.getPage())
@@ -124,15 +109,8 @@ public class GroupsAction implements UsersWsAction {
       int total = dbClient.groupMembershipDao().countGroups(dbSession, query, user.getUuid());
       Paging paging = forPageIndex(query.pageIndex()).withPageSize(query.pageSize()).andTotal(total);
       List<GroupMembershipDto> groups = dbClient.groupMembershipDao().selectGroups(dbSession, query, user.getUuid(), paging.offset(), query.pageSize());
-      return buildResponse(groups, defaultGroupFinder.findDefaultGroup(dbSession, organization.getUuid()), paging);
+      return buildResponse(groups, defaultGroupFinder.findDefaultGroup(dbSession), paging);
     }
-  }
-
-  private OrganizationDto findOrganizationByKey(DbSession dbSession, @Nullable String key) {
-    String effectiveKey = key == null ? defaultOrganizationProvider.get().getKey() : key;
-    Optional<OrganizationDto> org = dbClient.organizationDao().selectByKey(dbSession, effectiveKey);
-    checkFoundWithOptional(org, "No organization with key '%s'", key);
-    return org.get();
   }
 
   private static GroupsRequest toGroupsRequest(Request request) {
@@ -140,7 +118,6 @@ public class GroupsAction implements UsersWsAction {
     checkArgument(pageSize <= MAX_PAGE_SIZE, "The '%s' parameter must be less than %s", PAGE_SIZE, MAX_PAGE_SIZE);
     return GroupsRequest.builder()
       .setLogin(request.mandatoryParam(PARAM_LOGIN))
-      .setOrganization(request.param(PARAM_ORGANIZATION))
       .setSelected(request.mandatoryParam(SELECTED))
       .setQuery(request.param(TEXT_QUERY))
       .setPage(request.mandatoryParamAsInt(PAGE))
@@ -183,7 +160,6 @@ public class GroupsAction implements UsersWsAction {
   private static class GroupsRequest {
 
     private final String login;
-    private final String organization;
     private final String query;
     private final String selected;
     private final Integer page;
@@ -191,7 +167,6 @@ public class GroupsAction implements UsersWsAction {
 
     private GroupsRequest(Builder builder) {
       this.login = builder.login;
-      this.organization = builder.organization;
       this.query = builder.query;
       this.selected = builder.selected;
       this.page = builder.page;
@@ -200,11 +175,6 @@ public class GroupsAction implements UsersWsAction {
 
     public String getLogin() {
       return login;
-    }
-
-    @CheckForNull
-    public String getOrganization() {
-      return organization;
     }
 
     @CheckForNull
@@ -234,7 +204,6 @@ public class GroupsAction implements UsersWsAction {
 
   private static class Builder {
     private String login;
-    private String organization;
     private String query;
     private String selected;
     private Integer page;
@@ -246,11 +215,6 @@ public class GroupsAction implements UsersWsAction {
 
     public Builder setLogin(String login) {
       this.login = login;
-      return this;
-    }
-
-    public Builder setOrganization(@Nullable String organization) {
-      this.organization = organization;
       return this;
     }
 

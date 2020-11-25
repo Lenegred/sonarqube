@@ -26,21 +26,18 @@ import org.sonar.api.server.ws.Change;
 import org.sonar.api.server.ws.WebService.Action;
 import org.sonar.api.utils.System2;
 import org.sonar.db.DbTester;
-import org.sonar.db.organization.OrganizationDto;
 import org.sonar.db.user.GroupDto;
 import org.sonar.db.user.UserDto;
 import org.sonar.server.exceptions.ForbiddenException;
 import org.sonar.server.exceptions.NotFoundException;
 import org.sonar.server.exceptions.ServerException;
-import org.sonar.server.organization.TestDefaultOrganizationProvider;
 import org.sonar.server.tester.UserSessionRule;
 import org.sonar.server.usergroups.DefaultGroupFinder;
 import org.sonar.server.ws.TestRequest;
 import org.sonar.server.ws.WsActionTester;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.tuple;
-import static org.sonar.db.permission.OrganizationPermission.ADMINISTER;
+import static org.sonar.db.permission.GlobalPermission.ADMINISTER;
 import static org.sonar.test.JsonAssert.assertJson;
 
 public class UpdateActionTest {
@@ -52,9 +49,8 @@ public class UpdateActionTest {
   @Rule
   public ExpectedException expectedException = ExpectedException.none();
 
-  private TestDefaultOrganizationProvider defaultOrganizationProvider = TestDefaultOrganizationProvider.from(db);
-  private WsActionTester ws = new WsActionTester(
-    new UpdateAction(db.getDbClient(), userSession, new GroupWsSupport(db.getDbClient(), defaultOrganizationProvider, new DefaultGroupFinder(db.getDbClient()))));
+  private final WsActionTester ws = new WsActionTester(
+    new UpdateAction(db.getDbClient(), userSession, new GroupWsSupport(db.getDbClient(), new DefaultGroupFinder(db.getDbClient()))));
 
   @Test
   public void verify_definition() {
@@ -63,22 +59,19 @@ public class UpdateActionTest {
     assertThat(wsDef.isInternal()).isEqualTo(false);
     assertThat(wsDef.since()).isEqualTo("5.2");
     assertThat(wsDef.isPost()).isEqualTo(true);
-    assertThat(wsDef.changelog()).extracting(Change::getVersion, Change::getDescription).containsOnly(
-      tuple("8.4", "Parameter 'id' format changes from integer to string"),
-      tuple("6.4", "The default group is no longer editable"));
+    assertThat(wsDef.changelog()).extracting(Change::getVersion, Change::getDescription).isNotEmpty();
   }
 
   @Test
   public void update_both_name_and_description() {
-    insertDefaultGroupOnDefaultOrganization();
+    insertDefaultGroup();
     GroupDto group = db.users().insertGroup();
     UserDto user = db.users().insertUser();
-    db.organizations().addMember(db.getDefaultOrganization(), user);
     db.users().insertMember(group, user);
-    loginAsAdminOnDefaultOrganization();
+    loginAsAdmin();
 
     String result = newRequest()
-      .setParam("id", group.getUuid().toString())
+      .setParam("id", group.getUuid())
       .setParam("name", "new-name")
       .setParam("description", "New Description")
       .execute().getInput();
@@ -94,12 +87,32 @@ public class UpdateActionTest {
 
   @Test
   public void update_only_name() {
-    insertDefaultGroupOnDefaultOrganization();
+    insertDefaultGroup();
     GroupDto group = db.users().insertGroup();
-    loginAsAdminOnDefaultOrganization();
+    loginAsAdmin();
 
     String result = newRequest()
-      .setParam("id", group.getUuid().toString())
+      .setParam("id", group.getUuid())
+      .setParam("name", "new-name")
+      .execute().getInput();
+
+    assertJson(result).isSimilarTo("{" +
+      "  \"group\": {" +
+      "    \"name\": \"new-name\"," +
+      "    \"description\": \"" + group.getDescription() + "\"," +
+      "    \"membersCount\": 0" +
+      "  }" +
+      "}");
+  }
+
+  @Test
+  public void update_only_name_by_name() {
+    insertDefaultGroup();
+    GroupDto group = db.users().insertGroup();
+    loginAsAdmin();
+
+    String result = newRequest()
+      .setParam("currentName", group.getName())
       .setParam("name", "new-name")
       .execute().getInput();
 
@@ -114,12 +127,12 @@ public class UpdateActionTest {
 
   @Test
   public void update_only_description() {
-    insertDefaultGroupOnDefaultOrganization();
+    insertDefaultGroup();
     GroupDto group = db.users().insertGroup();
-    loginAsAdminOnDefaultOrganization();
+    loginAsAdmin();
 
     String result = newRequest()
-      .setParam("id", group.getUuid().toString())
+      .setParam("id", group.getUuid())
       .setParam("description", "New Description")
       .execute().getInput();
 
@@ -134,12 +147,12 @@ public class UpdateActionTest {
 
   @Test
   public void return_default_field() {
-    insertDefaultGroupOnDefaultOrganization();
+    insertDefaultGroup();
     GroupDto group = db.users().insertGroup();
-    loginAsAdminOnDefaultOrganization();
+    loginAsAdmin();
 
     String result = newRequest()
-      .setParam("id", group.getUuid().toString())
+      .setParam("id", group.getUuid())
       .setParam("name", "new-name")
       .execute().getInput();
 
@@ -155,32 +168,14 @@ public class UpdateActionTest {
 
   @Test
   public void require_admin_permission_on_organization() {
-    insertDefaultGroupOnDefaultOrganization();
+    insertDefaultGroup();
     GroupDto group = db.users().insertGroup();
     userSession.logIn("not-admin");
 
     expectedException.expect(ForbiddenException.class);
 
     newRequest()
-      .setParam("id", group.getUuid().toString())
-      .setParam("name", "some-product-bu")
-      .setParam("description", "Business Unit for Some Awesome Product")
-      .execute();
-  }
-
-  @Test
-  public void fails_if_admin_of_another_organization_only() {
-    OrganizationDto org1 = db.organizations().insert();
-    OrganizationDto org2 = db.organizations().insert();
-    GroupDto group = db.users().insertGroup(org1, "group1");
-    db.users().insertDefaultGroup(org1);
-    db.users().insertDefaultGroup(org2);
-    loginAsAdmin(org2);
-
-    expectedException.expect(ForbiddenException.class);
-
-    newRequest()
-      .setParam("id", group.getUuid().toString())
+      .setParam("id", group.getUuid())
       .setParam("name", "some-product-bu")
       .setParam("description", "Business Unit for Some Awesome Product")
       .execute();
@@ -188,55 +183,79 @@ public class UpdateActionTest {
 
   @Test
   public void fail_if_name_is_too_short() {
-    insertDefaultGroupOnDefaultOrganization();
+    insertDefaultGroup();
     GroupDto group = db.users().insertGroup();
-    loginAsAdminOnDefaultOrganization();
+    loginAsAdmin();
 
     expectedException.expect(IllegalArgumentException.class);
     expectedException.expectMessage("Group name cannot be empty");
 
     newRequest()
-      .setParam("id", group.getUuid().toString())
+      .setParam("id", group.getUuid())
       .setParam("name", "")
       .execute();
   }
 
   @Test
+  public void fail_if_no_id_and_no_currentname_are_provided() {
+    insertDefaultGroup();
+
+    expectedException.expect(IllegalArgumentException.class);
+    expectedException.expectMessage("Need to specify one and only one of 'id' or 'currentName'");
+
+    newRequest()
+      .setParam("name", "newname")
+      .execute();
+  }
+
+  @Test
+  public void fail_if_both_id_and_currentname_are_provided() {
+    insertDefaultGroup();
+
+    expectedException.expect(IllegalArgumentException.class);
+    expectedException.expectMessage("Need to specify one and only one of 'id' or 'currentName'");
+
+    newRequest()
+      .setParam("id", "id")
+      .setParam("currentName", "name")
+      .execute();
+  }
+
+  @Test
   public void fail_if_new_name_is_anyone() {
-    insertDefaultGroupOnDefaultOrganization();
+    insertDefaultGroup();
     GroupDto group = db.users().insertGroup();
-    loginAsAdminOnDefaultOrganization();
+    loginAsAdmin();
 
     expectedException.expect(IllegalArgumentException.class);
     expectedException.expectMessage("Anyone group cannot be used");
 
     newRequest()
-      .setParam("id", group.getUuid().toString())
+      .setParam("id", group.getUuid())
       .setParam("name", "AnYoNe")
       .execute();
   }
 
   @Test
   public void fail_to_update_if_name_already_exists() {
-    insertDefaultGroupOnDefaultOrganization();
-    OrganizationDto defaultOrg = db.getDefaultOrganization();
-    GroupDto groupToBeRenamed = db.users().insertGroup(defaultOrg, "a name");
+    insertDefaultGroup();
+    GroupDto groupToBeRenamed = db.users().insertGroup("a name");
     String newName = "new-name";
-    db.users().insertGroup(defaultOrg, newName);
-    loginAsAdminOnDefaultOrganization();
+    db.users().insertGroup(newName);
+    loginAsAdmin();
 
     expectedException.expect(ServerException.class);
     expectedException.expectMessage("Group 'new-name' already exists");
 
     newRequest()
-      .setParam("id", groupToBeRenamed.getUuid().toString())
+      .setParam("id", groupToBeRenamed.getUuid())
       .setParam("name", newName)
       .execute();
   }
 
   @Test
   public void fail_if_unknown_group_id() {
-    loginAsAdminOnDefaultOrganization();
+    loginAsAdmin();
 
     expectedException.expect(NotFoundException.class);
     expectedException.expectMessage("Could not find a user group with id '42'.");
@@ -247,29 +266,41 @@ public class UpdateActionTest {
   }
 
   @Test
-  public void fail_to_update_default_group_name() {
-    GroupDto group = db.users().insertDefaultGroup(db.getDefaultOrganization(), "default");
-    loginAsAdminOnDefaultOrganization();
+  public void fail_if_unknown_group_name() {
+    loginAsAdmin();
 
-    expectedException.expect(IllegalArgumentException.class);
-    expectedException.expectMessage("Default group 'default' cannot be used to perform this action");
+    expectedException.expect(NotFoundException.class);
+    expectedException.expectMessage("Could not find a user group with name '42'.");
 
     newRequest()
-      .setParam("id", group.getUuid().toString())
+      .setParam("currentName", "42")
+      .execute();
+  }
+
+  @Test
+  public void fail_to_update_default_group_name() {
+    GroupDto group = db.users().insertDefaultGroup();
+    loginAsAdmin();
+
+    expectedException.expect(IllegalArgumentException.class);
+    expectedException.expectMessage("Default group 'sonar-users' cannot be used to perform this action");
+
+    newRequest()
+      .setParam("id", group.getUuid())
       .setParam("name", "new name")
       .execute();
   }
 
   @Test
   public void fail_to_update_default_group_description() {
-    GroupDto group = db.users().insertDefaultGroup(db.getDefaultOrganization(), "default");
-    loginAsAdminOnDefaultOrganization();
+    GroupDto group = db.users().insertDefaultGroup();
+    loginAsAdmin();
 
     expectedException.expect(IllegalArgumentException.class);
-    expectedException.expectMessage("Default group 'default' cannot be used to perform this action");
+    expectedException.expectMessage("Default group 'sonar-users' cannot be used to perform this action");
 
     newRequest()
-      .setParam("id", group.getUuid().toString())
+      .setParam("id", group.getUuid())
       .setParam("description", "new description")
       .execute();
   }
@@ -278,16 +309,12 @@ public class UpdateActionTest {
     return ws.newRequest();
   }
 
-  private void loginAsAdminOnDefaultOrganization() {
-    loginAsAdmin(db.getDefaultOrganization());
+  private void loginAsAdmin() {
+    userSession.logIn().addPermission(ADMINISTER);
   }
 
-  private void loginAsAdmin(OrganizationDto org) {
-    userSession.logIn().addPermission(ADMINISTER, org);
-  }
-
-  private void insertDefaultGroupOnDefaultOrganization() {
-    db.users().insertDefaultGroup(db.getDefaultOrganization());
+  private void insertDefaultGroup() {
+    db.users().insertDefaultGroup();
   }
 
 }

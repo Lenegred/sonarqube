@@ -20,6 +20,7 @@
 package org.sonar.db.ce;
 
 import java.util.List;
+import java.util.Optional;
 import org.assertj.core.groups.Tuple;
 import org.junit.Rule;
 import org.junit.Test;
@@ -27,6 +28,8 @@ import org.junit.rules.ExpectedException;
 import org.sonar.api.utils.System2;
 import org.sonar.db.DbSession;
 import org.sonar.db.DbTester;
+import org.sonar.db.project.ProjectDto;
+import org.sonar.db.user.UserDto;
 
 import static org.apache.commons.lang.RandomStringUtils.randomAlphabetic;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,7 +40,7 @@ public class CeTaskMessageDaoTest {
   @Rule
   public ExpectedException expectedException = ExpectedException.none();
 
-  private CeTaskMessageDao underTest = new CeTaskMessageDao();
+  private final CeTaskMessageDao underTest = new CeTaskMessageDao();
 
   @Test
   public void insert() {
@@ -45,13 +48,17 @@ public class CeTaskMessageDaoTest {
       .setUuid("uuid_1")
       .setTaskUuid("task_uuid_1")
       .setMessage("message_1")
+      .setType(CeTaskMessageType.GENERIC)
       .setCreatedAt(1_222_333L));
     dbTester.getSession().commit();
 
-    assertThat(dbTester.select("select uuid as \"UUID\", task_uuid as \"TASK_UUID\", message as \"MESSAGE\", created_at as \"CREATED_AT\" from ce_task_message"))
-      .hasSize(1)
-      .extracting(t -> t.get("UUID"), t -> t.get("TASK_UUID"), t -> t.get("MESSAGE"), t -> t.get("CREATED_AT"))
-      .containsOnly(Tuple.tuple("uuid_1", "task_uuid_1", "message_1", 1_222_333L));
+    assertThat(
+      dbTester.select("select uuid as \"UUID\", task_uuid as \"TASK_UUID\", message as \"MESSAGE\", message_type as \"TYPE\", " +
+        "created_at as \"CREATED_AT\" from ce_task_message"))
+          .hasSize(1)
+          .extracting(t -> t.get("UUID"), t -> t.get("TASK_UUID"), t -> t.get("MESSAGE"), t -> CeTaskMessageType.valueOf((String) t.get("TYPE")),
+            t -> t.get("CREATED_AT"))
+          .containsOnly(Tuple.tuple("uuid_1", "task_uuid_1", "message_1", CeTaskMessageType.GENERIC, 1_222_333L));
   }
 
   @Test
@@ -88,11 +95,75 @@ public class CeTaskMessageDaoTest {
       .isEmpty();
   }
 
+  @Test
+  public void selectByUuid_returns_object_if_found() {
+    CeTaskMessageDto dto = insertMessage("526787a4-e8af-46c0-b340-8c48188646a5", 1, 1_222_333L);
+
+    Optional<CeTaskMessageDto> result = underTest.selectByUuid(dbTester.getSession(), dto.getUuid());
+
+    assertThat(result).isPresent();
+    assertThat(result.get().getUuid()).isEqualTo(dto.getUuid());
+  }
+
+  @Test
+  public void selectByUuid_returns_empty_if_no_record_found() {
+    Optional<CeTaskMessageDto> result = underTest.selectByUuid(dbTester.getSession(), "e2a71626-1f07-402a-aac7-dd4e0bbb4394");
+
+    assertThat(result).isNotPresent();
+  }
+
+  @Test
+  public void deleteByType_deletes_messages_of_given_type() {
+    String task1 = "task1";
+    CeTaskMessageDto[] messages = {
+      insertMessage(task1, 0, 1_222_333L, CeTaskMessageType.GENERIC),
+      insertMessage(task1, 1, 2_222_333L, CeTaskMessageType.SUGGEST_DEVELOPER_EDITION_UPGRADE),
+      insertMessage(task1, 2, 1_111_333L, CeTaskMessageType.GENERIC),
+      insertMessage(task1, 3, 1_222_111L, CeTaskMessageType.SUGGEST_DEVELOPER_EDITION_UPGRADE)
+    };
+
+    underTest.deleteByType(dbTester.getSession(), CeTaskMessageType.SUGGEST_DEVELOPER_EDITION_UPGRADE);
+
+    assertThat(underTest.selectByTask(dbTester.getSession(), task1))
+      .extracting(CeTaskMessageDto::getUuid)
+      .containsExactlyInAnyOrder(messages[0].getUuid(), messages[2].getUuid());
+  }
+
+  @Test
+  public void selectNonDismissedByUserAndTask_returns_empty_on_empty_table() {
+    UserDto user = dbTester.users().insertUser();
+    String taskUuid = "17ae66e6-fe83-4c80-b704-4b04e9c5abe8";
+
+    List<CeTaskMessageDto> dto = underTest.selectNonDismissedByUserAndTask(dbTester.getSession(), taskUuid, user.getUuid());
+
+    assertThat(dto).isEmpty();
+  }
+
+  @Test
+  public void selectNonDismissedByUserAndTask_returns_non_dismissed_messages() {
+    UserDto user = dbTester.users().insertUser();
+    ProjectDto project = dbTester.components().insertPrivateProjectDto();
+    dbTester.users().insertUserDismissedMessage(user, project, CeTaskMessageType.SUGGEST_DEVELOPER_EDITION_UPGRADE);
+    String taskUuid = "17ae66e6-fe83-4c80-b704-4b04e9c5abe8";
+    CeTaskMessageDto msg1 = insertMessage(taskUuid, 1, 1_222_333L);
+    insertMessage(taskUuid, 2, 1_222_334L, CeTaskMessageType.SUGGEST_DEVELOPER_EDITION_UPGRADE);
+    CeTaskMessageDto msg3 = insertMessage(taskUuid, 3, 1_222_335L);
+    List<CeTaskMessageDto> messages = underTest.selectNonDismissedByUserAndTask(dbTester.getSession(), taskUuid, user.getUuid());
+
+    assertThat(messages).hasSize(2);
+    assertThat(messages).extracting(CeTaskMessageDto::getUuid).containsExactlyInAnyOrder(msg1.getUuid(), msg3.getUuid());
+  }
+
   private CeTaskMessageDto insertMessage(String taskUuid, int i, long createdAt) {
+    return insertMessage(taskUuid, i, createdAt, CeTaskMessageType.GENERIC);
+  }
+
+  private CeTaskMessageDto insertMessage(String taskUuid, int i, long createdAt, CeTaskMessageType messageType) {
     CeTaskMessageDto res = new CeTaskMessageDto()
       .setUuid("message_" + i)
       .setTaskUuid(taskUuid)
       .setMessage("test_" + i)
+      .setType(messageType)
       .setCreatedAt(createdAt);
     DbSession dbSession = dbTester.getSession();
     underTest.insert(dbSession, res);

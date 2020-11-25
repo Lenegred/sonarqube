@@ -19,9 +19,9 @@
  */
 package org.sonar.server.organization.ws;
 
-import com.google.common.collect.Multiset;
 import com.google.common.collect.Ordering;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import javax.annotation.Nullable;
 import org.sonar.api.server.ws.Change;
@@ -51,10 +51,10 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Strings.emptyToNull;
 import static java.util.Optional.ofNullable;
 import static org.sonar.api.server.ws.WebService.SelectionMode.SELECTED;
-import static org.sonar.db.permission.OrganizationPermission.ADMINISTER;
-import static org.sonar.server.es.SearchOptions.MAX_LIMIT;
-import static org.sonar.server.organization.ws.OrganizationsWsSupport.PARAM_ORGANIZATION;
+import static org.sonar.db.permission.GlobalPermission.ADMINISTER;
+import static org.sonar.server.es.SearchOptions.MAX_PAGE_SIZE;
 import static org.sonar.server.exceptions.NotFoundException.checkFoundWithOptional;
+import static org.sonar.server.organization.ws.OrganizationsWsSupport.PARAM_ORGANIZATION;
 import static org.sonar.server.ws.WsUtils.writeProtobuf;
 
 public class SearchMembersAction implements OrganizationsWsAction {
@@ -86,7 +86,7 @@ public class SearchMembersAction implements OrganizationsWsAction {
 
     action.createSearchQuery("orwe", "names", "logins")
       .setMinimumLength(2);
-    action.addPagingParams(50, MAX_LIMIT);
+    action.addPagingParams(50, MAX_PAGE_SIZE);
 
     action.createParam(Param.SELECTED)
       .setDescription("Depending on the value, show only selected items (selected=selected) or deselected items (selected=deselected).")
@@ -104,7 +104,6 @@ public class SearchMembersAction implements OrganizationsWsAction {
   public void handle(Request request, Response response) throws Exception {
     try (DbSession dbSession = dbClient.openSession(false)) {
       OrganizationDto organization = getOrganization(dbSession, request.param("organization"));
-      userSession.checkMembership(organization);
 
       UserQuery.Builder userQuery = buildUserQuery(request, organization);
       SearchOptions searchOptions = buildSearchOptions(request);
@@ -116,9 +115,9 @@ public class SearchMembersAction implements OrganizationsWsAction {
         .sorted(Ordering.explicit(orderedLogins).onResultOf(UserDto::getLogin))
         .collect(MoreCollectors.toList());
 
-      Multiset<String> groupCountByLogin = null;
-      if (userSession.hasPermission(ADMINISTER, organization)) {
-        groupCountByLogin = dbClient.groupMembershipDao().countGroupByLoginsAndOrganization(dbSession, orderedLogins, organization.getUuid());
+      Map<String, Integer> groupCountByLogin = null;
+      if (userSession.hasPermission(ADMINISTER)) {
+        groupCountByLogin = dbClient.groupMembershipDao().countGroupsByUsers(dbSession, orderedLogins);
       }
 
       Common.Paging wsPaging = buildWsPaging(request, searchResults);
@@ -128,7 +127,7 @@ public class SearchMembersAction implements OrganizationsWsAction {
     }
   }
 
-  private SearchMembersWsResponse buildResponse(List<UserDto> users, Common.Paging wsPaging, @Nullable Multiset<String> groupCountByLogin) {
+  private SearchMembersWsResponse buildResponse(List<UserDto> users, Common.Paging wsPaging, @Nullable Map<String, Integer> groupCountByLogin) {
     SearchMembersWsResponse.Builder response = SearchMembersWsResponse.newBuilder();
 
     User.Builder wsUser = User.newBuilder();
@@ -140,7 +139,7 @@ public class SearchMembersAction implements OrganizationsWsAction {
           .setLogin(login);
         ofNullable(emptyToNull(userDto.getEmail())).ifPresent(text -> wsUser.setAvatar(avatarResolver.create(userDto)));
         ofNullable(userDto.getName()).ifPresent(wsUser::setName);
-        ofNullable(groupCountByLogin).ifPresent(count -> wsUser.setGroupCount(groupCountByLogin.count(login)));
+        ofNullable(groupCountByLogin).ifPresent(count -> wsUser.setGroupCount(groupCountByLogin.getOrDefault(login, 0)));
         return wsUser;
       })
       .forEach(response::addUsers);

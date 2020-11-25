@@ -23,15 +23,17 @@ import { waitAndUpdate } from 'sonar-ui-common/helpers/testUtils';
 import {
   countBindedProjects,
   deleteConfiguration,
-  getAlmDefinitions
+  getAlmDefinitions,
+  validateAlmSettings
 } from '../../../../../api/alm-settings';
-import { AlmKeys } from '../../../../../types/alm-settings';
+import { AlmKeys, AlmSettingsBindingStatusType } from '../../../../../types/alm-settings';
 import { AlmIntegration } from '../AlmIntegration';
 
 jest.mock('../../../../../api/alm-settings', () => ({
   countBindedProjects: jest.fn().mockResolvedValue(0),
   deleteConfiguration: jest.fn().mockResolvedValue(undefined),
-  getAlmDefinitions: jest.fn().mockResolvedValue({ github: [] })
+  getAlmDefinitions: jest.fn().mockResolvedValue({ bitbucket: [], github: [], gitlab: [] }),
+  validateAlmSettings: jest.fn().mockResolvedValue('')
 }));
 
 beforeEach(() => {
@@ -40,6 +42,25 @@ beforeEach(() => {
 
 it('should render correctly', () => {
   expect(shallowRender()).toMatchSnapshot();
+});
+
+it('should validate existing configurations', async () => {
+  (getAlmDefinitions as jest.Mock).mockResolvedValueOnce({
+    [AlmKeys.Azure]: [{ key: 'a1' }],
+    [AlmKeys.Bitbucket]: [{ key: 'b1' }],
+    [AlmKeys.GitHub]: [{ key: 'gh1' }, { key: 'gh2' }],
+    [AlmKeys.GitLab]: [{ key: 'gl1' }]
+  });
+
+  const wrapper = shallowRender();
+
+  await waitAndUpdate(wrapper);
+
+  expect(validateAlmSettings).toBeCalledTimes(4);
+  expect(validateAlmSettings).toBeCalledWith('b1');
+  expect(validateAlmSettings).toBeCalledWith('gh1');
+  expect(validateAlmSettings).toBeCalledWith('gh2');
+  expect(validateAlmSettings).toBeCalledWith('gl1');
 });
 
 it('should handle alm selection', async () => {
@@ -76,17 +97,61 @@ it('should delete configuration', async () => {
   expect(wrapper.state().definitionKeyForDeletion).toBeUndefined();
 });
 
-it('should fetch settings', async () => {
-  const wrapper = shallowRender();
+it('should validate a configuration', async () => {
+  const definitionKey = 'validated-key';
+  const failureMessage = 'an error occured';
 
-  await wrapper
-    .instance()
-    .fetchPullRequestDecorationSetting()
-    .then(() => {
-      expect(getAlmDefinitions).toBeCalled();
-      expect(wrapper.state().definitions).toEqual({ github: [] });
-      expect(wrapper.state().loadingAlmDefinitions).toBe(false);
-    });
+  const wrapper = shallowRender();
+  await waitAndUpdate(wrapper);
+
+  (validateAlmSettings as jest.Mock)
+    .mockRejectedValueOnce(undefined)
+    .mockResolvedValueOnce(failureMessage)
+    .mockResolvedValueOnce('');
+
+  await wrapper.instance().handleCheck(definitionKey);
+
+  expect(wrapper.state().definitionStatus[definitionKey]).toEqual({
+    alertSuccess: true,
+    failureMessage: '',
+    type: AlmSettingsBindingStatusType.Warning
+  });
+
+  await wrapper.instance().handleCheck(definitionKey);
+
+  expect(wrapper.state().definitionStatus[definitionKey]).toEqual({
+    alertSuccess: true,
+    failureMessage,
+    type: AlmSettingsBindingStatusType.Failure
+  });
+
+  await wrapper.instance().handleCheck(definitionKey);
+
+  expect(wrapper.state().definitionStatus[definitionKey]).toEqual({
+    alertSuccess: true,
+    failureMessage: '',
+    type: AlmSettingsBindingStatusType.Success
+  });
+});
+
+it('should fetch settings', async () => {
+  const definitions = {
+    [AlmKeys.Azure]: [{ key: 'a1' }],
+    [AlmKeys.Bitbucket]: [{ key: 'b1' }],
+    [AlmKeys.GitHub]: [{ key: 'gh1' }],
+    [AlmKeys.GitLab]: [{ key: 'gl1' }]
+  };
+
+  const wrapper = shallowRender();
+  await waitAndUpdate(wrapper);
+
+  (getAlmDefinitions as jest.Mock).mockResolvedValueOnce(definitions);
+
+  await wrapper.instance().fetchPullRequestDecorationSetting();
+
+  expect(getAlmDefinitions).toBeCalled();
+  expect(wrapper.state().definitions).toEqual(definitions);
+  expect(wrapper.state().loadingAlmDefinitions).toBe(false);
 });
 
 function shallowRender() {

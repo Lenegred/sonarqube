@@ -20,28 +20,27 @@
 package org.sonar.server.permission.ws;
 
 import java.util.Optional;
-import javax.annotation.Nullable;
 import org.sonar.api.server.ws.Request;
 import org.sonar.db.DbClient;
 import org.sonar.db.DbSession;
 import org.sonar.db.component.ComponentDto;
-import org.sonar.db.organization.OrganizationDto;
 import org.sonar.db.permission.template.PermissionTemplateDto;
 import org.sonar.db.user.UserDto;
 import org.sonar.server.component.ComponentFinder;
+import org.sonar.server.exceptions.NotFoundException;
 import org.sonar.server.permission.GroupUuidOrAnyone;
-import org.sonar.server.permission.ProjectUuid;
 import org.sonar.server.permission.UserId;
 import org.sonar.server.permission.ws.template.WsTemplateRef;
 import org.sonar.server.usergroups.ws.GroupWsRef;
 import org.sonar.server.usergroups.ws.GroupWsSupport;
 import org.sonarqube.ws.client.permission.PermissionsWsParameters;
 
-import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
+import static java.lang.String.format;
+import static java.util.Optional.ofNullable;
 import static org.sonar.server.exceptions.NotFoundException.checkFound;
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_GROUP_ID;
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_GROUP_NAME;
-import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_ORGANIZATION;
 
 public class PermissionWsSupport {
 
@@ -53,15 +52,6 @@ public class PermissionWsSupport {
     this.dbClient = dbClient;
     this.componentFinder = componentFinder;
     this.groupWsSupport = groupWsSupport;
-  }
-
-  public OrganizationDto findOrganization(DbSession dbSession, @Nullable String organizationKey) {
-    return groupWsSupport.findOrganizationByKey(dbSession, organizationKey);
-  }
-
-  public Optional<ProjectUuid> findProjectUuid(DbSession dbSession, Request request) {
-    return findProject(dbSession, request)
-      .map(ProjectUuid::new);
   }
 
   public Optional<ComponentDto> findProject(DbSession dbSession, Request request) {
@@ -80,33 +70,30 @@ public class PermissionWsSupport {
 
   public GroupUuidOrAnyone findGroup(DbSession dbSession, Request request) {
     String groupUuid = request.param(PARAM_GROUP_ID);
-    String orgKey = request.param(PARAM_ORGANIZATION);
     String groupName = request.param(PARAM_GROUP_NAME);
-    GroupWsRef groupRef = GroupWsRef.create(groupUuid, orgKey, groupName);
+    GroupWsRef groupRef = GroupWsRef.create(groupUuid, groupName);
     return groupWsSupport.findGroupOrAnyone(dbSession, groupRef);
   }
 
   public UserId findUser(DbSession dbSession, String login) {
-    UserDto dto = dbClient.userDao().selectActiveUserByLogin(dbSession, login);
-    checkFound(dto, "User with login '%s' is not found'", login);
+    UserDto dto = ofNullable(dbClient.userDao().selectActiveUserByLogin(dbSession, login))
+      .orElseThrow(() -> new NotFoundException(format("User with login '%s' is not found'", login)));
     return new UserId(dto.getUuid(), dto.getLogin());
   }
 
   public PermissionTemplateDto findTemplate(DbSession dbSession, WsTemplateRef ref) {
-    if (ref.uuid() != null) {
+    String uuid = ref.uuid();
+    String name = ref.name();
+    if (uuid != null) {
       return checkFound(
-        dbClient.permissionTemplateDao().selectByUuid(dbSession, ref.uuid()),
-        "Permission template with id '%s' is not found", ref.uuid());
+        dbClient.permissionTemplateDao().selectByUuid(dbSession, uuid),
+        "Permission template with id '%s' is not found", uuid);
     } else {
-      OrganizationDto org = findOrganization(dbSession, ref.getOrganization());
+      checkNotNull(name);
       return checkFound(
-        dbClient.permissionTemplateDao().selectByName(dbSession, org.getUuid(), ref.name()),
-        "Permission template with name '%s' is not found (case insensitive) in organization with key '%s'", ref.name(), org.getKey());
+        dbClient.permissionTemplateDao().selectByName(dbSession, name),
+        "Permission template with name '%s' is not found (case insensitive)", name);
     }
   }
 
-  public void checkMembership(DbSession dbSession, OrganizationDto organization, UserId user) {
-    checkArgument(dbClient.organizationMemberDao().select(dbSession, organization.getUuid(), user.getUuid()).isPresent(),
-      "User '%s' is not member of organization '%s'", user.getLogin(), organization.getKey());
-  }
 }

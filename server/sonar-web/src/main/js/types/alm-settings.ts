@@ -26,6 +26,7 @@ export const enum AlmKeys {
 
 export interface AlmBindingDefinition {
   key: string;
+  url?: string;
 }
 
 export interface AzureBindingDefinition extends AlmBindingDefinition {
@@ -64,6 +65,17 @@ export interface ProjectBitbucketBindingResponse extends ProjectAlmBindingRespon
   slug: string;
 }
 
+export interface ProjectGitHubBindingResponse extends ProjectAlmBindingResponse {
+  alm: AlmKeys.GitHub;
+  repository: string;
+}
+
+export interface ProjectGitLabBindingResponse extends ProjectAlmBindingResponse {
+  alm: AlmKeys.GitLab;
+  repository: string;
+  url: string;
+}
+
 export interface ProjectAlmBindingParams {
   almSetting: string;
   project: string;
@@ -96,4 +108,17 @@ export interface AlmSettingsBindingDefinitions {
   [AlmKeys.Bitbucket]: BitbucketBindingDefinition[];
   [AlmKeys.GitHub]: GithubBindingDefinition[];
   [AlmKeys.GitLab]: GitlabBindingDefinition[];
+}
+
+export interface AlmSettingsBindingStatus {
+  alertSuccess: boolean;
+  failureMessage: string;
+  type: AlmSettingsBindingStatusType;
+}
+
+export enum AlmSettingsBindingStatusType {
+  Validating,
+  Success,
+  Failure,
+  Warning
 }

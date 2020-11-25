@@ -27,7 +27,6 @@ import org.sonar.api.server.ws.Response;
 import org.sonar.api.server.ws.WebService;
 import org.sonar.db.DbClient;
 import org.sonar.db.DbSession;
-import org.sonar.db.organization.OrganizationDto;
 import org.sonar.db.permission.PermissionQuery;
 import org.sonar.db.permission.template.PermissionTemplateDto;
 import org.sonar.server.permission.UserId;
@@ -41,7 +40,6 @@ import static org.sonar.server.permission.PermissionPrivilegeChecker.checkGlobal
 import static org.sonar.server.permission.ws.WsParameters.createTemplateParameters;
 import static org.sonar.server.permission.ws.WsParameters.createUserLoginParameter;
 import static org.sonar.server.permission.ws.template.WsTemplateRef.newTemplateRef;
-import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_ORGANIZATION;
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_PERMISSION;
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_TEMPLATE_ID;
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_TEMPLATE_NAME;
@@ -65,7 +63,6 @@ public class AddUserToTemplateAction implements PermissionsWsAction {
       .setLogin(request.mandatoryParam(PARAM_USER_LOGIN))
       .setPermission(request.mandatoryParam(PARAM_PERMISSION))
       .setTemplateId(request.param(PARAM_TEMPLATE_ID))
-      .setOrganization(request.param(PARAM_ORGANIZATION))
       .setTemplateName(request.param(PARAM_TEMPLATE_NAME));
   }
 
@@ -96,21 +93,19 @@ public class AddUserToTemplateAction implements PermissionsWsAction {
 
     try (DbSession dbSession = dbClient.openSession(false)) {
       PermissionTemplateDto template = wsSupport.findTemplate(dbSession, newTemplateRef(
-        request.getTemplateId(), request.getOrganization(), request.getTemplateName()));
-      OrganizationDto organizationDto = wsSupport.findOrganization(dbSession, request.getOrganization());
-      checkGlobalAdmin(userSession, organizationDto.getUuid());
+        request.getTemplateId(), request.getTemplateName()));
+      checkGlobalAdmin(userSession);
       UserId user = wsSupport.findUser(dbSession, userLogin);
-      wsSupport.checkMembership(dbSession, organizationDto, user);
 
-      if (!isUserAlreadyAdded(dbSession, organizationDto, template.getUuid(), userLogin, permission)) {
+      if (!isUserAlreadyAdded(dbSession, template.getUuid(), userLogin, permission)) {
         dbClient.permissionTemplateDao().insertUserPermission(dbSession, template.getUuid(), user.getUuid(), permission);
         dbSession.commit();
       }
     }
   }
 
-  private boolean isUserAlreadyAdded(DbSession dbSession, OrganizationDto organizationDto, String templateUuid, String userLogin, String permission) {
-    PermissionQuery permissionQuery = PermissionQuery.builder().setOrganizationUuid(organizationDto.getUuid()).setPermission(permission).build();
+  private boolean isUserAlreadyAdded(DbSession dbSession, String templateUuid, String userLogin, String permission) {
+    PermissionQuery permissionQuery = PermissionQuery.builder().setPermission(permission).build();
     List<String> usersWithPermission = dbClient.permissionTemplateDao().selectUserLoginsByQueryAndTemplate(dbSession, permissionQuery, templateUuid);
     return usersWithPermission.stream().anyMatch(s -> s.equals(userLogin));
   }

@@ -3,9 +3,6 @@ title: SonarScanner for MSBuild
 url: /analysis/scan/sonarscanner-for-msbuild/
 ---
 
-<!-- static -->
-<!-- update_center:scannermsbuild -->
-<!-- /static -->
 <update-center updatecenterkey="scannermsbuild"></update-center>
 
 The SonarScanner for MSBuild is the recommended way to launch an analysis for projects/solutions using MSBuild or dotnet command as a build tool. It is the result of a [collaboration between SonarSource and Microsoft](http://www.sonarqube.org/announcing-sonarqube-integration-with-msbuild-and-team-build/). 
@@ -89,7 +86,7 @@ Notes:
 
 ## Analysis steps
 ### Begin
-The begin step is executed when you add the `begin` command line argument. It hooks into the MSBuild pipeline, downloads SonarQube quality profiles and settings and prepares your project for the analysis.
+The begin step is executed when you add the `begin` command line argument. It hooks into the MSBuild pipeline, downloads SonarQube Quality Profiles and settings and prepares your project for the analysis.
 
 Command Line Parameters:
 
@@ -107,7 +104,7 @@ For detailed information about all available parameters, see [Analysis Parameter
 
 [[warning]]
 | The "begin" step will modify your build like this:
-| * the active `CodeAnalysisRuleSet` will be updated to match the SonarQube quality profile
+| * the active `CodeAnalysisRuleSet` will be updated to match the SonarQube Quality Profile
 | * `WarningsAsErrors` will be turned off
 |
 | If your build process cannot tolerate these changes we recommend creating a second build job for SonarQube analysis.
@@ -186,7 +183,7 @@ Concurrent analyses (i.e. parallel analysis of two solutions on the same build m
 1. Go in the `Targets` folder and copy the folder `SonarQube.Integration.ImportBefore.targets`
 1. Paste it under your build tool global `ImportBefore` folder (if the folder doesn't exist, create it).
    * For MSBuild, the path is `<MSBUILD_INSTALL_DIR>\<Version>\Microsoft.Common.targets\ImportBefore` where <MSBUILD_INSTALL_DIR> is:
-      *For v14, default path is: `C:\Program Files (x86)\MSBuild\14.0\Microsoft.Common.Targets\ImportBefore`
+      * For v14, default path is: `C:\Program Files (x86)\MSBuild\14.0\Microsoft.Common.Targets\ImportBefore`
       * For v15, default path is: `C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\MSBuild\15.0\Microsoft.Common.targets\ImportBefore` (for VS Community Edition)
       * For v16, default path is: `C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\MSBuild\Current\Microsoft.Common.targets` (for VS Community Edition)
    * For dotnet, the path is `<DOTNET_SDK_INSTALL_DIR>\15.0\Microsoft.Common.targets\ImportBefore` where `<DOTNET_SDK_INSTALL_DIR>` can be found using the `dotnet --info` and looking for the Base Path property.

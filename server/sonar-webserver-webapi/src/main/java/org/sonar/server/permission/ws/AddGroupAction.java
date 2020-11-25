@@ -27,18 +27,17 @@ import org.sonar.api.server.ws.Response;
 import org.sonar.api.server.ws.WebService;
 import org.sonar.db.DbClient;
 import org.sonar.db.DbSession;
+import org.sonar.db.component.ComponentDto;
 import org.sonar.server.permission.GroupPermissionChange;
 import org.sonar.server.permission.GroupUuidOrAnyone;
 import org.sonar.server.permission.PermissionChange;
 import org.sonar.server.permission.PermissionService;
 import org.sonar.server.permission.PermissionUpdater;
-import org.sonar.server.permission.ProjectUuid;
 import org.sonar.server.user.UserSession;
 
 import static org.sonar.server.permission.PermissionPrivilegeChecker.checkProjectAdmin;
 import static org.sonar.server.permission.ws.WsParameters.createGroupIdParameter;
 import static org.sonar.server.permission.ws.WsParameters.createGroupNameParameter;
-import static org.sonar.server.permission.ws.WsParameters.createOrganizationParameter;
 import static org.sonar.server.permission.ws.WsParameters.createProjectParameters;
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_PERMISSION;
 
@@ -66,7 +65,7 @@ public class AddGroupAction implements PermissionsWsAction {
   @Override
   public void define(WebService.NewController context) {
     WebService.NewAction action = context.createAction(ACTION)
-      .setDescription("Add permission to a group.<br /> " +
+      .setDescription("Add a permission to a group.<br /> " +
         "This service defaults to global permissions, but can be limited to project permissions by providing project id or project key.<br /> " +
         "The group name or group id must be provided. <br />" +
         "Requires one of the following permissions:" +
@@ -80,8 +79,7 @@ public class AddGroupAction implements PermissionsWsAction {
       .setPost(true)
       .setHandler(this);
 
-    wsParameters.createPermissionParameter(action);
-    createOrganizationParameter(action).setSince("6.2");
+    wsParameters.createPermissionParameter(action, "The permission you would like to grant to the group.");
     createGroupNameParameter(action);
     createGroupIdParameter(action);
     createProjectParameters(action);
@@ -91,14 +89,12 @@ public class AddGroupAction implements PermissionsWsAction {
   public void handle(Request request, Response response) throws Exception {
     try (DbSession dbSession = dbClient.openSession(false)) {
       GroupUuidOrAnyone group = wsSupport.findGroup(dbSession, request);
-      Optional<ProjectUuid> projectUuid = wsSupport.findProjectUuid(dbSession, request);
-
-      checkProjectAdmin(userSession, group.getOrganizationUuid(), projectUuid);
-
+      Optional<ComponentDto> project = wsSupport.findProject(dbSession, request);
+      checkProjectAdmin(userSession, project.orElse(null));
       PermissionChange change = new GroupPermissionChange(
         PermissionChange.Operation.ADD,
         request.mandatoryParam(PARAM_PERMISSION),
-        projectUuid.orElse(null),
+        project.orElse(null),
         group, permissionService);
       permissionUpdater.apply(dbSession, ImmutableList.of(change));
     }

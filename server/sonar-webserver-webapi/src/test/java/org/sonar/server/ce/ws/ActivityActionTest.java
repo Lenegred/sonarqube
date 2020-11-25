@@ -38,6 +38,7 @@ import org.sonar.db.ce.CeActivityDto.Status;
 import org.sonar.db.ce.CeQueueDto;
 import org.sonar.db.ce.CeTaskCharacteristicDto;
 import org.sonar.db.ce.CeTaskMessageDto;
+import org.sonar.db.ce.CeTaskMessageType;
 import org.sonar.db.ce.CeTaskTypes;
 import org.sonar.db.component.BranchType;
 import org.sonar.db.component.ComponentDto;
@@ -245,6 +246,7 @@ public class ActivityActionTest {
         .setUuid("uuid_" + taskUuid + "_" + i)
         .setTaskUuid(taskUuid)
         .setMessage("m_" + taskUuid + "_" + i)
+        .setType(CeTaskMessageType.GENERIC)
         .setCreatedAt(taskUuid.hashCode() + i)));
     db.commit();
   }
@@ -390,7 +392,7 @@ public class ActivityActionTest {
       .setParam(PARAM_TYPE, CeTaskTypes.REPORT)
       .setParam(PARAM_STATUS, "SUCCESS,FAILED,CANCELED,IN_PROGRESS,PENDING"));
 
-    assertThat(result.getTasksCount()).isEqualTo(2);
+    assertThat(result.getTasksCount()).isEqualTo(1);
   }
 
   @Test
@@ -574,6 +576,24 @@ public class ActivityActionTest {
       .execute();
 
     JsonAssert.assertJson(wsResponse.getInput()).isSimilarTo("{\"tasks\":[]}");
+  }
+
+  @Test
+  public void filter_out_duplicate_tasks_in_progress_and_success(){
+    logInAsSystemAdministrator();
+    ComponentDto project1 = db.components().insertPrivateProject();
+    ComponentDto project2 = db.components().insertPrivateProject();
+    ComponentDto project3 = db.components().insertPrivateProject();
+    insertQueue("T2", project2, IN_PROGRESS);
+    insertQueue("T3", project3, IN_PROGRESS);
+    insertActivity("T1", project1, SUCCESS);
+    insertActivity("T2", project2, SUCCESS);
+
+    ActivityResponse response = ws.newRequest().setParam("status", "FAILED,IN_PROGRESS,SUCCESS").executeProtobuf(ActivityResponse.class);
+
+    assertThat(response.getTasksList())
+      .extracting(Task::getId)
+      .containsExactlyInAnyOrder("T1","T2","T3");
   }
 
   private void logInAsSystemAdministrator() {

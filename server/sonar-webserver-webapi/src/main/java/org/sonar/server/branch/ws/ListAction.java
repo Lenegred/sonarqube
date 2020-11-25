@@ -49,7 +49,7 @@ import static org.sonar.api.web.UserRole.USER;
 import static org.sonar.core.util.stream.MoreCollectors.toList;
 import static org.sonar.core.util.stream.MoreCollectors.uniqueIndex;
 import static org.sonar.db.component.BranchType.BRANCH;
-import static org.sonar.db.permission.OrganizationPermission.SCAN;
+import static org.sonar.db.permission.GlobalPermission.SCAN;
 import static org.sonar.server.branch.ws.BranchesWs.addProjectParam;
 import static org.sonar.server.branch.ws.ProjectBranchesParameters.ACTION_LIST;
 import static org.sonar.server.branch.ws.ProjectBranchesParameters.PARAM_PROJECT;
@@ -138,7 +138,7 @@ public class ListAction implements BranchWsAction {
   private void checkPermission(ProjectDto project) {
     if (!userSession.hasProjectPermission(USER, project) &&
       !userSession.hasProjectPermission(UserRole.SCAN, project) &&
-      !userSession.hasPermission(SCAN, project.getOrganizationUuid())) {
+      !userSession.hasPermission(SCAN)) {
       throw insufficientPrivilegesException();
     }
   }

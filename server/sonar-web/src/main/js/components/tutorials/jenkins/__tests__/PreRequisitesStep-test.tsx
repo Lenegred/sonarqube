@@ -20,6 +20,7 @@
 
 import { shallow } from 'enzyme';
 import * as React from 'react';
+import { AlmKeys } from '../../../../types/alm-settings';
 import PreRequisitesStep, { PreRequisitesStepProps } from '../PreRequisitesStep';
 import { renderStepContent } from '../test-utils';
 
@@ -32,6 +33,7 @@ it('should render correctly', () => {
 function shallowRender(props: Partial<PreRequisitesStepProps> = {}) {
   return shallow<PreRequisitesStepProps>(
     <PreRequisitesStep
+      alm={AlmKeys.Bitbucket}
       onChangeSkipNextTime={jest.fn()}
       onDone={jest.fn()}
       onOpen={jest.fn()}

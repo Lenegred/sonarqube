@@ -73,7 +73,6 @@ public class OrganizationDeleter {
     deleteProjects(dbSession, organization);
     deletePermissions(dbSession, organization);
     deleteGroups(dbSession, organization);
-    deleteQualityProfiles(dbSession, organization);
     deleteQualityGates(dbSession, organization);
     deleteOrganizationAlmBinding(dbSession, organization);
     deleteOrganization(dbSession, organization);
@@ -93,18 +92,10 @@ public class OrganizationDeleter {
   }
 
   private void deletePermissions(DbSession dbSession, OrganizationDto organization) {
-    dbClient.permissionTemplateDao().deleteByOrganization(dbSession, organization.getUuid());
-    dbClient.userPermissionDao().deleteByOrganization(dbSession, organization.getUuid());
-    dbClient.groupPermissionDao().deleteByOrganization(dbSession, organization.getUuid());
+
   }
 
   private void deleteGroups(DbSession dbSession, OrganizationDto organization) {
-    dbClient.groupDao().deleteByOrganization(dbSession, organization.getUuid());
-  }
-
-  private void deleteQualityProfiles(DbSession dbSession, OrganizationDto organization) {
-    List<QProfileDto> profiles = dbClient.qualityProfileDao().selectOrderedByOrganizationUuid(dbSession, organization);
-    qProfileFactory.delete(dbSession, profiles);
   }
 
   private void deleteQualityGates(DbSession dbSession, OrganizationDto organization) {

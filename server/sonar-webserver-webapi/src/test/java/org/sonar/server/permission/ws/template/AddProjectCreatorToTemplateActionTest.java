@@ -42,7 +42,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 import static org.sonar.core.permission.GlobalPermissions.QUALITY_GATE_ADMIN;
-import static org.sonar.db.permission.OrganizationPermission.ADMINISTER_QUALITY_GATES;
+import static org.sonar.db.permission.GlobalPermission.ADMINISTER_QUALITY_GATES;
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_PERMISSION;
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_TEMPLATE_ID;
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_TEMPLATE_NAME;
@@ -63,13 +63,13 @@ public class AddProjectCreatorToTemplateActionTest extends BasePermissionWsTest<
 
   @Before
   public void setUp() {
-    template = db.permissionTemplates().insertTemplate(db.getDefaultOrganization());
+    template = db.permissionTemplates().insertTemplate();
     when(system.now()).thenReturn(2_000_000_000L);
   }
 
   @Test
   public void insert_row_when_no_template_permission() {
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
 
     newRequest()
       .setParam(PARAM_PERMISSION, UserRole.ADMIN)
@@ -81,7 +81,7 @@ public class AddProjectCreatorToTemplateActionTest extends BasePermissionWsTest<
 
   @Test
   public void update_row_when_existing_template_permission() {
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
     PermissionTemplateCharacteristicDto characteristic = db.getDbClient().permissionTemplateCharacteristicDao().insert(db.getSession(),
       new PermissionTemplateCharacteristicDto()
         .setUuid(Uuids.createFast())
@@ -106,7 +106,7 @@ public class AddProjectCreatorToTemplateActionTest extends BasePermissionWsTest<
 
   @Test
   public void fail_when_template_does_not_exist() {
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
 
     expectedException.expect(NotFoundException.class);
 
@@ -118,7 +118,7 @@ public class AddProjectCreatorToTemplateActionTest extends BasePermissionWsTest<
 
   @Test
   public void fail_if_permission_is_not_a_project_permission() {
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
 
     expectedException.expect(IllegalArgumentException.class);
 
@@ -129,8 +129,8 @@ public class AddProjectCreatorToTemplateActionTest extends BasePermissionWsTest<
   }
 
   @Test
-  public void fail_if_not_admin_of_default_organization() {
-    userSession.logIn().addPermission(ADMINISTER_QUALITY_GATES, db.getDefaultOrganization());
+  public void fail_if_not_admin() {
+    userSession.logIn().addPermission(ADMINISTER_QUALITY_GATES);
 
     expectedException.expect(ForbiddenException.class);
 

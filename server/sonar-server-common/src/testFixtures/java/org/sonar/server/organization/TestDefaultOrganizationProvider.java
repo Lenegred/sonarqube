@@ -23,6 +23,7 @@ import java.util.Date;
 import org.sonar.db.DbTester;
 import org.sonar.db.organization.OrganizationDto;
 
+//TODO fix this
 public class TestDefaultOrganizationProvider implements DefaultOrganizationProvider {
 
   private final DefaultOrganizationProvider delegate;
@@ -66,11 +67,11 @@ public class TestDefaultOrganizationProvider implements DefaultOrganizationProvi
     }
   }
 
-  private static final class DbTesterDefaultOrganizationProvider implements DefaultOrganizationProvider {
+  public static final class DbTesterDefaultOrganizationProvider implements DefaultOrganizationProvider {
     private final DbTester dbTester;
     private DefaultOrganization defaultOrganization = null;
 
-    private DbTesterDefaultOrganizationProvider(DbTester dbTester) {
+    public DbTesterDefaultOrganizationProvider(DbTester dbTester) {
       this.dbTester = dbTester;
     }
 

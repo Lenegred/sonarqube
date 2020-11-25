@@ -19,11 +19,11 @@
  */
 package org.sonar.server.permission.ws.template;
 
-import com.google.common.collect.Lists;
 import com.google.common.collect.Table;
 import com.google.common.collect.TreeBasedTable;
 import java.util.List;
 import java.util.Locale;
+import java.util.stream.Collectors;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
 import org.sonar.api.resources.Qualifiers;
@@ -34,18 +34,13 @@ import org.sonar.api.server.ws.WebService.Param;
 import org.sonar.core.i18n.I18n;
 import org.sonar.db.DbClient;
 import org.sonar.db.DbSession;
-import org.sonar.db.organization.DefaultTemplates;
-import org.sonar.db.organization.OrganizationDto;
 import org.sonar.db.permission.template.CountByTemplateAndPermissionDto;
 import org.sonar.db.permission.template.PermissionTemplateCharacteristicDto;
 import org.sonar.db.permission.template.PermissionTemplateDto;
 import org.sonar.server.permission.DefaultTemplatesResolver;
 import org.sonar.server.permission.DefaultTemplatesResolver.ResolvedDefaultTemplates;
-import org.sonar.server.permission.DefaultTemplatesResolverImpl;
 import org.sonar.server.permission.PermissionService;
-import org.sonar.server.permission.ws.PermissionWsSupport;
 import org.sonar.server.permission.ws.PermissionsWsAction;
-import org.sonar.server.permission.ws.WsParameters;
 import org.sonar.server.user.UserSession;
 import org.sonarqube.ws.Permissions;
 import org.sonarqube.ws.Permissions.Permission;
@@ -55,11 +50,9 @@ import org.sonarqube.ws.Permissions.SearchTemplatesWsResponse.TemplateIdQualifie
 
 import static java.util.Optional.ofNullable;
 import static org.sonar.api.utils.DateUtils.formatDateTime;
-import static org.sonar.server.exceptions.NotFoundException.checkFoundWithOptional;
 import static org.sonar.server.permission.PermissionPrivilegeChecker.checkGlobalAdmin;
 import static org.sonar.server.permission.ws.template.SearchTemplatesData.builder;
 import static org.sonar.server.ws.WsUtils.writeProtobuf;
-import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_ORGANIZATION;
 
 public class SearchTemplatesAction implements PermissionsWsAction {
   private static final String PROPERTY_PREFIX = "projects_role.";
@@ -68,41 +61,34 @@ public class SearchTemplatesAction implements PermissionsWsAction {
   private final DbClient dbClient;
   private final UserSession userSession;
   private final I18n i18n;
-  private final PermissionWsSupport wsSupport;
   private final DefaultTemplatesResolver defaultTemplatesResolver;
   private final PermissionService permissionService;
 
-  public SearchTemplatesAction(DbClient dbClient, UserSession userSession, I18n i18n, PermissionWsSupport wsSupport,
-    DefaultTemplatesResolver defaultTemplatesResolver, PermissionService permissionService) {
+  public SearchTemplatesAction(DbClient dbClient, UserSession userSession, I18n i18n, DefaultTemplatesResolver defaultTemplatesResolver,
+    PermissionService permissionService) {
     this.dbClient = dbClient;
     this.userSession = userSession;
     this.i18n = i18n;
-    this.wsSupport = wsSupport;
     this.defaultTemplatesResolver = defaultTemplatesResolver;
     this.permissionService = permissionService;
   }
 
   @Override
   public void define(WebService.NewController context) {
-    WebService.NewAction action = context.createAction("search_templates")
+    context.createAction("search_templates")
       .setDescription("List permission templates.<br />" +
         "Requires the following permission: 'Administer System'.")
       .setResponseExample(getClass().getResource("search_templates-example.json"))
       .setSince("5.2")
       .addSearchQuery("defau", "permission template names")
       .setHandler(this);
-
-    WsParameters.createOrganizationParameter(action).setSince("6.2");
   }
 
   @Override
   public void handle(Request wsRequest, Response wsResponse) throws Exception {
     try (DbSession dbSession = dbClient.openSession(false)) {
-      OrganizationDto org = wsSupport.findOrganization(dbSession, wsRequest.param(PARAM_ORGANIZATION));
-      SearchTemplatesRequest request = new SearchTemplatesRequest()
-        .setOrganizationUuid(org.getUuid())
-        .setQuery(wsRequest.param(Param.TEXT_QUERY));
-      checkGlobalAdmin(userSession, request.getOrganizationUuid());
+      SearchTemplatesRequest request = new SearchTemplatesRequest().setQuery(wsRequest.param(Param.TEXT_QUERY));
+      checkGlobalAdmin(userSession);
 
       SearchTemplatesWsResponse searchTemplatesWsResponse = buildResponse(load(dbSession, request));
       writeProtobuf(searchTemplatesWsResponse, wsRequest, wsResponse);
@@ -191,13 +177,9 @@ public class SearchTemplatesAction implements PermissionsWsAction {
   private SearchTemplatesData load(DbSession dbSession, SearchTemplatesRequest request) {
     SearchTemplatesData.Builder data = builder();
     List<PermissionTemplateDto> templates = searchTemplates(dbSession, request);
-    List<String> templateUuids = Lists.transform(templates, PermissionTemplateDto::getUuid);
+    List<String> templateUuids = templates.stream().map(PermissionTemplateDto::getUuid).collect(Collectors.toList());
 
-    DefaultTemplates defaultTemplates = checkFoundWithOptional(
-      dbClient.organizationDao().getDefaultTemplates(dbSession, request.getOrganizationUuid()),
-      "No Default templates for organization with uuid '%s'", request.getOrganizationUuid());
-    ResolvedDefaultTemplates resolvedDefaultTemplates = defaultTemplatesResolver.resolve(defaultTemplates);
-
+    ResolvedDefaultTemplates resolvedDefaultTemplates = defaultTemplatesResolver.resolve(dbSession);
     data.templates(templates)
       .defaultTemplates(resolvedDefaultTemplates)
       .userCountByTemplateUuidAndPermission(userCountByTemplateUuidAndPermission(dbSession, templateUuids))
@@ -208,7 +190,7 @@ public class SearchTemplatesAction implements PermissionsWsAction {
   }
 
   private List<PermissionTemplateDto> searchTemplates(DbSession dbSession, SearchTemplatesRequest request) {
-    return dbClient.permissionTemplateDao().selectAll(dbSession, request.getOrganizationUuid(), request.getQuery());
+    return dbClient.permissionTemplateDao().selectAll(dbSession, request.getQuery());
   }
 
   private Table<String, String, Integer> userCountByTemplateUuidAndPermission(DbSession dbSession, List<String> templateUuids) {
@@ -246,7 +228,6 @@ public class SearchTemplatesAction implements PermissionsWsAction {
 
   private static class SearchTemplatesRequest {
     private String query;
-    private String organizationUuid;
 
     @CheckForNull
     public String getQuery() {
@@ -255,15 +236,6 @@ public class SearchTemplatesAction implements PermissionsWsAction {
 
     public SearchTemplatesRequest setQuery(@Nullable String query) {
       this.query = query;
-      return this;
-    }
-
-    public String getOrganizationUuid() {
-      return organizationUuid;
-    }
-
-    public SearchTemplatesRequest setOrganizationUuid(String s) {
-      this.organizationUuid = s;
       return this;
     }
   }

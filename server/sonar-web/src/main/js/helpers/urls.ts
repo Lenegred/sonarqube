@@ -1,3 +1,4 @@
+import { pick } from 'lodash';
 /*
  * SonarQube
  * Copyright (C) 2009-2020 SonarSource SA
@@ -20,8 +21,9 @@
 import { getBaseUrl, Location } from 'sonar-ui-common/helpers/urls';
 import { getProfilePath } from '../apps/quality-profiles/utils';
 import { BranchLike, BranchParameters } from '../types/branch-like';
-import { ComponentQualifier, isPortfolioLike } from '../types/component';
+import { ComponentQualifier, isApplication, isPortfolioLike } from '../types/component';
 import { GraphType } from '../types/project-activity';
+import { SecurityStandard } from '../types/security';
 import { getBranchLikeQuery, isBranch, isMainBranch, isPullRequest } from './branch-like';
 
 type Query = Location['query'];
@@ -36,6 +38,19 @@ export function getComponentOverviewUrl(
     : getProjectQueryUrl(componentKey, branchParameters);
 }
 
+export function getComponentAdminUrl(
+  componentKey: string,
+  componentQualifier: ComponentQualifier | string
+) {
+  if (isPortfolioLike(componentQualifier)) {
+    return getPortfolioAdminUrl(componentKey);
+  } else if (isApplication(componentQualifier)) {
+    return getApplicationAdminUrl(componentKey);
+  } else {
+    return getProjectUrl(componentKey);
+  }
+}
+
 export function getProjectUrl(project: string, branch?: string): Location {
   return { pathname: '/dashboard', query: { id: project, branch } };
 }
@@ -48,8 +63,15 @@ export function getPortfolioUrl(key: string): Location {
   return { pathname: '/portfolio', query: { id: key } };
 }
 
-export function getPortfolioAdminUrl(key: string, qualifier: string) {
-  return { pathname: '/project/admin/extension/governance/console', query: { id: key, qualifier } };
+export function getPortfolioAdminUrl(key: string) {
+  return {
+    pathname: '/project/admin/extension/governance/console',
+    query: { id: key, qualifier: ComponentQualifier.Portfolio }
+  };
+}
+
+export function getApplicationAdminUrl(key: string) {
+  return { pathname: '/application/console', query: { id: key } };
 }
 
 export function getComponentBackgroundTaskUrl(componentKey: string, status?: string): Location {
@@ -93,7 +115,7 @@ export function getComponentIssuesUrl(componentKey: string, query?: Query): Loca
  * Generate URL for a component's security hotspot page
  */
 export function getComponentSecurityHotspotsUrl(componentKey: string, query: Query = {}): Location {
-  const { branch, pullRequest, sinceLeakPeriod, hotspots, assignedToMe, category } = query;
+  const { branch, pullRequest, sinceLeakPeriod, hotspots, assignedToMe } = query;
   return {
     pathname: '/security_hotspots',
     query: {
@@ -103,7 +125,11 @@ export function getComponentSecurityHotspotsUrl(componentKey: string, query: Que
       sinceLeakPeriod,
       hotspots,
       assignedToMe,
-      category
+      ...pick(query, [
+        SecurityStandard.SONARSOURCE,
+        SecurityStandard.OWASP_TOP10,
+        SecurityStandard.SANS_TOP25
+      ])
     }
   };
 }
@@ -178,48 +204,39 @@ export function getComponentPermissionsUrl(componentKey: string): Location {
 /**
  * Generate URL for a quality profile
  */
-export function getQualityProfileUrl(
-  name: string,
-  language: string,
-  organization?: string | null
-): Location {
-  return getProfilePath(name, language, organization);
+export function getQualityProfileUrl(name: string, language: string): Location {
+  return getProfilePath(name, language);
 }
 
-export function getQualityGateUrl(key: string, organization?: string | null): Location {
+export function getQualityGateUrl(key: string): Location {
   return {
-    pathname: getQualityGatesUrl(organization).pathname + '/show/' + encodeURIComponent(key)
+    pathname: '/quality_gates/show/' + encodeURIComponent(key)
   };
 }
 
-export function getQualityGatesUrl(organization?: string | null): Location {
+export function getQualityGatesUrl(): Location {
   return {
-    pathname:
-      (organization ? '/organizations/' + encodeURIComponent(organization) : '') + '/quality_gates'
+    pathname: '/quality_gates'
   };
 }
 
 /**
  * Generate URL for the rules page
  */
-export function getRulesUrl(query: Query, organization: string | null | undefined): Location {
-  const pathname = organization ? `/organizations/${organization}/rules` : '/coding_rules';
-  return { pathname, query };
+export function getRulesUrl(query: Query): Location {
+  return { pathname: '/coding_rules', query };
 }
 
 /**
  * Generate URL for the rules page filtering only active deprecated rules
  */
-export function getDeprecatedActiveRulesUrl(
-  query: Query = {},
-  organization: string | null | undefined
-): Location {
+export function getDeprecatedActiveRulesUrl(query: Query = {}): Location {
   const baseQuery = { activation: 'true', statuses: 'DEPRECATED' };
-  return getRulesUrl({ ...query, ...baseQuery }, organization);
+  return getRulesUrl({ ...query, ...baseQuery });
 }
 
-export function getRuleUrl(rule: string, organization: string | undefined) {
-  return getRulesUrl({ open: rule, rule_key: rule }, organization);
+export function getRuleUrl(rule: string) {
+  return getRulesUrl({ open: rule, rule_key: rule });
 }
 
 export function getMarkdownHelpUrl(): string {

@@ -40,8 +40,6 @@ import org.sonar.db.organization.OrganizationDto;
 import org.sonar.server.component.TestComponentFinder;
 import org.sonar.server.exceptions.ForbiddenException;
 import org.sonar.server.exceptions.NotFoundException;
-import org.sonar.server.organization.DefaultOrganizationProvider;
-import org.sonar.server.organization.TestDefaultOrganizationProvider;
 import org.sonar.server.tester.UserSessionRule;
 import org.sonar.server.ws.TestRequest;
 import org.sonar.server.ws.WsActionTester;
@@ -58,8 +56,8 @@ import static org.sonar.api.resources.Qualifiers.PROJECT;
 import static org.sonar.api.web.UserRole.ADMIN;
 import static org.sonar.api.web.UserRole.CODEVIEWER;
 import static org.sonar.api.web.UserRole.USER;
-import static org.sonar.db.permission.OrganizationPermission.ADMINISTER;
-import static org.sonar.db.permission.OrganizationPermission.SCAN;
+import static org.sonar.db.permission.GlobalPermission.ADMINISTER;
+import static org.sonar.db.permission.GlobalPermission.SCAN;
 import static org.sonarqube.ws.MediaTypes.JSON;
 import static org.sonarqube.ws.Settings.Definition.CategoryOneOfCase.CATEGORYONEOF_NOT_SET;
 import static org.sonarqube.ws.Settings.Definition.DefaultValueOneOfCase.DEFAULTVALUEONEOF_NOT_SET;
@@ -86,8 +84,7 @@ public class ListDefinitionsActionTest {
   private ComponentDbTester componentDb = new ComponentDbTester(db);
   private ComponentDto project;
   private PropertyDefinitions propertyDefinitions = new PropertyDefinitions(System2.INSTANCE);
-  private DefaultOrganizationProvider defaultOrganizationProvider = TestDefaultOrganizationProvider.from(db);
-  private SettingsWsSupport support = new SettingsWsSupport(defaultOrganizationProvider, userSession);
+  private SettingsWsSupport support = new SettingsWsSupport(userSession);
   private WsActionTester ws = new WsActionTester(
     new ListDefinitionsAction(dbClient, TestComponentFinder.from(db), userSession, propertyDefinitions, support));
 
@@ -342,7 +339,7 @@ public class ListDefinitionsActionTest {
 
   @Test
   public void return_secured_settings_when_not_authenticated_but_with_scan_permission() {
-    userSession.anonymous().addPermission(SCAN, db.getDefaultOrganization());
+    userSession.anonymous().addPermission(SCAN);
     propertyDefinitions.addComponents(asList(
       PropertyDefinition.builder("foo").build(),
       PropertyDefinition.builder("secret.secured").build()));
@@ -478,7 +475,7 @@ public class ListDefinitionsActionTest {
   }
 
   private void logInAsAdmin(OrganizationDto org) {
-    userSession.logIn().addPermission(ADMINISTER, org);
+    userSession.logIn().addPermission(ADMINISTER);
   }
 
   private void logInAsProjectAdmin() {

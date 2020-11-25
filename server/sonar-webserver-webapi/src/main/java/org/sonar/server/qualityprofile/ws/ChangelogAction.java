@@ -48,7 +48,7 @@ import static org.sonar.api.utils.DateUtils.parseEndingDateOrDateTime;
 import static org.sonar.api.utils.DateUtils.parseStartingDateOrDateTime;
 import static org.sonar.core.util.stream.MoreCollectors.toSet;
 import static org.sonar.core.util.stream.MoreCollectors.uniqueIndex;
-import static org.sonar.server.es.SearchOptions.MAX_LIMIT;
+import static org.sonar.server.es.SearchOptions.MAX_PAGE_SIZE;
 import static org.sonarqube.ws.client.qualityprofile.QualityProfileWsParameters.PARAM_SINCE;
 import static org.sonarqube.ws.client.qualityprofile.QualityProfileWsParameters.PARAM_TO;
 
@@ -73,12 +73,9 @@ public class ChangelogAction implements QProfileWsAction {
       .setHandler(this)
       .setResponseExample(getClass().getResource("changelog-example.json"));
 
-    QProfileWsSupport.createOrganizationParam(wsAction)
-      .setSince("6.4");
-
     QProfileReference.defineParams(wsAction, languages);
 
-    wsAction.addPagingParams(50, MAX_LIMIT);
+    wsAction.addPagingParams(50, MAX_PAGE_SIZE);
 
     wsAction.createParam(PARAM_SINCE)
       .setDescription("Start date for the changelog. <br>" +

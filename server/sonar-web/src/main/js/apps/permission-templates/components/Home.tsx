@@ -24,7 +24,6 @@ import Header from './Header';
 import List from './List';
 
 interface Props {
-  organization: T.Organization | undefined;
   permissionTemplates: T.PermissionTemplate[];
   permissions: T.Permission[];
   ready: boolean;
@@ -37,10 +36,9 @@ export default function Home(props: Props) {
     <div className="page page-limited">
       <Helmet defer={false} title={translate('permission_templates.page')} />
 
-      <Header organization={props.organization} ready={props.ready} refresh={props.refresh} />
+      <Header ready={props.ready} refresh={props.refresh} />
 
       <List
-        organization={props.organization}
         permissionTemplates={props.permissionTemplates}
         permissions={props.permissions}
         refresh={props.refresh}

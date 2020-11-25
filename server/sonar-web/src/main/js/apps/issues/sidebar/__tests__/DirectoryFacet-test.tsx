@@ -19,9 +19,22 @@
  */
 import { shallow } from 'enzyme';
 import * as React from 'react';
-import { TreeComponentWithPath } from '../../../../api/components';
+import { getDirectories } from '../../../../api/components';
+import ListStyleFacet from '../../../../components/facet/ListStyleFacet';
+import { mockBranch } from '../../../../helpers/mocks/branch-like';
+import { mockComponent } from '../../../../helpers/testMocks';
+import { TreeComponentWithPath } from '../../../../types/component';
 import { Query } from '../../utils';
 import DirectoryFacet from '../DirectoryFacet';
+
+jest.mock('../../../../api/components', () => ({
+  getDirectories: jest.fn().mockResolvedValue({})
+}));
+
+beforeEach(() => jest.clearAllMocks());
+
+const branch = mockBranch();
+const component = mockComponent();
 
 it('should render correctly', () => {
   const wrapper = shallowRender();
@@ -33,12 +46,31 @@ it('should render correctly', () => {
   expect(instance.renderFacetItem('foo/bar')).toMatchSnapshot();
 });
 
+it('should properly search for directory', () => {
+  const wrapper = shallowRender();
+
+  const query = 'foo';
+
+  wrapper
+    .find(ListStyleFacet)
+    .props()
+    .onSearch(query);
+
+  expect(getDirectories).toHaveBeenCalledWith({
+    branch: branch.name,
+    component: component.key,
+    q: query,
+    ps: 30,
+    p: undefined
+  });
+});
+
 describe("ListStyleFacet's callback props", () => {
   const wrapper = shallowRender();
   const instance = wrapper.instance();
 
   it('#getSearchResultText()', () => {
-    expect(instance.getSearchResultText({ name: 'bar' } as TreeComponentWithPath)).toBe('bar');
+    expect(instance.getSearchResultText({ path: 'bar' } as TreeComponentWithPath)).toBe('bar');
   });
 
   it('#getSearchResultKey()', () => {
@@ -55,7 +87,8 @@ describe("ListStyleFacet's callback props", () => {
 function shallowRender(props: Partial<DirectoryFacet['props']> = {}) {
   return shallow<DirectoryFacet>(
     <DirectoryFacet
-      componentKey="foo"
+      branchLike={branch}
+      componentKey={component.key}
       directories={['foo/', 'bar/baz/']}
       fetching={false}
       loadSearchResultCount={jest.fn()}

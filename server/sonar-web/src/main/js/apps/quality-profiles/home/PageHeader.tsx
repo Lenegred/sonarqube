@@ -23,7 +23,7 @@ import { Button } from 'sonar-ui-common/components/controls/buttons';
 import { Alert } from 'sonar-ui-common/components/ui/Alert';
 import { translate } from 'sonar-ui-common/helpers/l10n';
 import { Actions } from '../../../api/quality-profiles';
-import { Router, withRouter } from '../../../components/hoc/withRouter';
+import { Location, Router, withRouter } from '../../../components/hoc/withRouter';
 import { Profile } from '../types';
 import { getProfilePath } from '../utils';
 import CreateProfileForm from './CreateProfileForm';
@@ -32,6 +32,7 @@ import RestoreProfileForm from './RestoreProfileForm';
 interface Props {
   actions: Actions;
   languages: Array<{ key: string; name: string }>;
+  location: Location;
   organization: string | null;
   profiles: Profile[];
   router: Pick<Router, 'push'>;
@@ -56,9 +57,7 @@ export class PageHeader extends React.PureComponent<Props, State> {
   handleCreate = (profile: Profile) => {
     this.props.updateProfiles().then(
       () => {
-        this.props.router.push(
-          getProfilePath(profile.name, profile.language, this.props.organization)
-        );
+        this.props.router.push(getProfilePath(profile.name, profile.language));
       },
       () => {}
     );
@@ -77,7 +76,7 @@ export class PageHeader extends React.PureComponent<Props, State> {
   };
 
   render() {
-    const { actions, languages, organization, profiles } = this.props;
+    const { actions, languages, location, organization, profiles } = this.props;
     return (
       <header className="page-header">
         <h1 className="page-title">{translate('quality_profiles.page')}</h1>
@@ -129,6 +128,7 @@ export class PageHeader extends React.PureComponent<Props, State> {
         {this.state.createFormOpen && (
           <CreateProfileForm
             languages={languages}
+            location={location}
             onClose={this.closeCreateForm}
             onCreate={this.handleCreate}
             organization={organization}

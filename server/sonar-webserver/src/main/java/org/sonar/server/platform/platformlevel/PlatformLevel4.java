@@ -103,6 +103,7 @@ import org.sonar.server.measure.live.LiveMeasureModule;
 import org.sonar.server.measure.ws.MeasuresWsModule;
 import org.sonar.server.metric.CoreCustomMetrics;
 import org.sonar.server.metric.DefaultMetricFinder;
+import org.sonar.server.metric.UnanalyzedLanguageMetrics;
 import org.sonar.server.metric.ws.MetricsWsModule;
 import org.sonar.server.newcodeperiod.ws.NewCodePeriodsWsModule;
 import org.sonar.server.notification.NotificationModule;
@@ -118,7 +119,6 @@ import org.sonar.server.permission.PermissionUpdater;
 import org.sonar.server.permission.UserPermissionChanger;
 import org.sonar.server.permission.index.PermissionIndexer;
 import org.sonar.server.permission.ws.PermissionsWsModule;
-import org.sonar.server.platform.BackendCleanup;
 import org.sonar.server.platform.ClusterVerification;
 import org.sonar.server.platform.PersistentSettings;
 import org.sonar.server.platform.SystemInfoWriterModule;
@@ -248,14 +248,13 @@ public class PlatformLevel4 extends PlatformLevel {
       ClusterVerification.class,
       LogServerId.class,
       LogOAuthWarning.class,
-      PluginDownloader.class,
       PluginUninstaller.class,
+      PluginDownloader.class,
       PageRepository.class,
       ResourceTypes.class,
       DefaultResourceTypes.get(),
       SettingsChangeNotifier.class,
       ServerWs.class,
-      BackendCleanup.class,
       IndexDefinitions.class,
       WebAnalyticsLoaderImpl.class,
 
@@ -329,6 +328,7 @@ public class PlatformLevel4 extends PlatformLevel {
       CustomMeasuresWsModule.class,
       CoreCustomMetrics.class,
       DefaultMetricFinder.class,
+      UnanalyzedLanguageMetrics.class,
 
       QualityGateModule.class,
       ProjectsInWarningModule.class,

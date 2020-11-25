@@ -26,7 +26,7 @@ import org.sonar.api.server.ws.WebService.NewAction;
 import org.sonar.api.server.ws.WebService.NewController;
 import org.sonar.db.DbClient;
 import org.sonar.db.DbSession;
-import org.sonar.db.permission.OrganizationPermission;
+import org.sonar.db.permission.GlobalPermission;
 import org.sonar.db.user.GroupDto;
 import org.sonar.db.user.UserDto;
 import org.sonar.server.user.UserSession;
@@ -56,8 +56,8 @@ public class RemoveUserAction implements UserGroupsWsAction {
   public void define(NewController context) {
     NewAction action = context.createAction("remove_user")
       .setDescription(format("Remove a user from a group.<br />" +
-        "'%s' or '%s' must be provided.<br>" +
-        "Requires the following permission: 'Administer System'.",
+          "'%s' or '%s' must be provided.<br>" +
+          "Requires the following permission: 'Administer System'.",
         PARAM_GROUP_ID, PARAM_GROUP_NAME))
       .setHandler(this)
       .setPost(true)
@@ -75,7 +75,7 @@ public class RemoveUserAction implements UserGroupsWsAction {
 
     try (DbSession dbSession = dbClient.openSession(false)) {
       GroupDto group = support.findGroupDto(dbSession, request);
-      userSession.checkPermission(OrganizationPermission.ADMINISTER, group.getOrganizationUuid());
+      userSession.checkPermission(GlobalPermission.ADMINISTER);
       support.checkGroupIsNotDefault(dbSession, group);
 
       String login = request.mandatoryParam(PARAM_LOGIN);
@@ -95,7 +95,7 @@ public class RemoveUserAction implements UserGroupsWsAction {
    */
   private void ensureLastAdminIsNotRemoved(DbSession dbSession, GroupDto group, UserDto user) {
     int remainingAdmins = dbClient.authorizationDao().countUsersWithGlobalPermissionExcludingGroupMember(dbSession,
-      group.getOrganizationUuid(), OrganizationPermission.ADMINISTER.getKey(), group.getUuid(), user.getUuid());
+      GlobalPermission.ADMINISTER.getKey(), group.getUuid(), user.getUuid());
     checkRequest(remainingAdmins > 0, "The last administrator user cannot be removed");
   }
 

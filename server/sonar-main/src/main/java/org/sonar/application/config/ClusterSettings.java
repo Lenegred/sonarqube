@@ -21,6 +21,7 @@ package org.sonar.application.config;
 
 import com.google.common.net.HostAndPort;
 import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -45,8 +46,11 @@ import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toSet;
 import static org.sonar.process.ProcessProperties.Property.AUTH_JWT_SECRET;
 import static org.sonar.process.ProcessProperties.Property.CLUSTER_ENABLED;
+import static org.sonar.process.ProcessProperties.Property.CLUSTER_ES_HOSTS;
 import static org.sonar.process.ProcessProperties.Property.CLUSTER_HZ_HOSTS;
+import static org.sonar.process.ProcessProperties.Property.CLUSTER_NODE_ES_HOST;
 import static org.sonar.process.ProcessProperties.Property.CLUSTER_NODE_HOST;
+import static org.sonar.process.ProcessProperties.Property.CLUSTER_NODE_SEARCH_HOST;
 import static org.sonar.process.ProcessProperties.Property.CLUSTER_NODE_TYPE;
 import static org.sonar.process.ProcessProperties.Property.CLUSTER_SEARCH_HOSTS;
 import static org.sonar.process.ProcessProperties.Property.CLUSTER_WEB_STARTUP_LEADER;
@@ -55,6 +59,7 @@ import static org.sonar.process.ProcessProperties.Property.SEARCH_HOST;
 import static org.sonar.process.ProcessProperties.Property.SEARCH_PORT;
 
 public class ClusterSettings implements Consumer<Props> {
+  private static final Set<Property> FORBIDDEN_SEARCH_NODE_SETTINGS = EnumSet.of(SEARCH_HOST, SEARCH_PORT);
 
   private final NetworkUtils network;
 
@@ -75,11 +80,6 @@ public class ClusterSettings implements Consumer<Props> {
       throw new MessageException(format("Property [%s] is forbidden", CLUSTER_WEB_STARTUP_LEADER.getKey()));
     }
 
-    checkNodeSpecificProperties(props);
-    checkCommonProperties(props);
-  }
-
-  private void checkNodeSpecificProperties(Props props) {
     NodeType nodeType = toNodeType(props);
     switch (nodeType) {
       case APPLICATION:
@@ -87,22 +87,36 @@ public class ClusterSettings implements Consumer<Props> {
         requireValue(props, AUTH_JWT_SECRET);
         Set<AddressAndPort> hzNodes = parseHosts(CLUSTER_HZ_HOSTS, requireValue(props, CLUSTER_HZ_HOSTS));
         ensureNotLoopbackAddresses(CLUSTER_HZ_HOSTS, hzNodes);
+        checkClusterNodeHost(props);
+        checkClusterSearchHosts(props);
         break;
       case SEARCH:
-        AddressAndPort searchHost = parseAndCheckHost(SEARCH_HOST, requireValue(props, SEARCH_HOST));
-        ensureLocalButNotLoopbackAddress(SEARCH_HOST, searchHost);
-        requireValue(props, SEARCH_PORT);
+        ensureNoSearchNodeForbiddenSettings(props);
+        AddressAndPort searchHost = parseAndCheckHost(CLUSTER_NODE_SEARCH_HOST, requireValue(props, CLUSTER_NODE_SEARCH_HOST));
+        ensureLocalButNotLoopbackAddress(CLUSTER_NODE_SEARCH_HOST, searchHost);
+        AddressAndPort esHost = parseAndCheckHost(CLUSTER_NODE_ES_HOST, requireValue(props, CLUSTER_NODE_ES_HOST));
+        ensureLocalButNotLoopbackAddress(CLUSTER_NODE_ES_HOST, esHost);
+        checkClusterEsHosts(props);
         break;
       default:
         throw new UnsupportedOperationException("Unknown value: " + nodeType);
     }
   }
 
-  private void checkCommonProperties(Props props) {
+  private void checkClusterNodeHost(Props props) {
     AddressAndPort clusterNodeHost = parseAndCheckHost(CLUSTER_NODE_HOST, requireValue(props, CLUSTER_NODE_HOST));
     ensureLocalButNotLoopbackAddress(CLUSTER_NODE_HOST, clusterNodeHost);
+  }
+
+  private void checkClusterSearchHosts(Props props) {
     Set<AddressAndPort> searchHosts = parseHosts(CLUSTER_SEARCH_HOSTS, requireValue(props, CLUSTER_SEARCH_HOSTS));
     ensureNotLoopbackAddresses(CLUSTER_SEARCH_HOSTS, searchHosts);
+  }
+
+  private void checkClusterEsHosts(Props props) {
+    Set<AddressAndPort> esHosts = parseHosts(CLUSTER_ES_HOSTS, requireValue(props, CLUSTER_ES_HOSTS));
+    ensureNotLoopbackAddresses(CLUSTER_ES_HOSTS, esHosts);
+    ensureEitherPortsAreProvidedOrOnlyHosts(CLUSTER_ES_HOSTS, esHosts);
   }
 
   private Set<AddressAndPort> parseHosts(Property property, String value) {
@@ -138,7 +152,7 @@ public class ClusterSettings implements Consumer<Props> {
     return addressAndPort;
   }
 
-  private static NodeType toNodeType(Props props) {
+  public static NodeType toNodeType(Props props) {
     String nodeTypeValue = requireValue(props, CLUSTER_NODE_TYPE);
     if (!NodeType.isValid(nodeTypeValue)) {
       throw new MessageException(format("Invalid value for property %s: [%s], only [%s] are allowed", CLUSTER_NODE_TYPE.getKey(), nodeTypeValue,
@@ -155,6 +169,17 @@ public class ClusterSettings implements Consumer<Props> {
       throw new MessageException(format("Property %s is mandatory", key));
     }
     return trimmedValue;
+  }
+
+  private static void ensureNoSearchNodeForbiddenSettings(Props props) {
+    List<String> violations = FORBIDDEN_SEARCH_NODE_SETTINGS.stream()
+      .filter(setting -> props.value(setting.getKey()) != null)
+      .map(Property::getKey)
+      .collect(toList());
+
+    if (!violations.isEmpty()) {
+      throw new MessageException(format("Properties [%s] are not allowed when running SonarQube in cluster mode.", String.join(", ", violations)));
+    }
   }
 
   private static void ensureNotH2(Props props) {
@@ -179,6 +204,15 @@ public class ClusterSettings implements Consumer<Props> {
     String host = addressAndPort.getHost();
     if (!network.isLocal(host) || network.isLoopback(host)) {
       throw new MessageException(format("Property %s must be a local non-loopback address: %s", property.getKey(), addressAndPort.getHost()));
+    }
+  }
+
+  private static void ensureEitherPortsAreProvidedOrOnlyHosts(Property property, Set<AddressAndPort> addressAndPorts) {
+    Set<AddressAndPort> hostsWithoutPort = addressAndPorts.stream()
+      .filter(t -> !t.hasPort())
+      .collect(toSet());
+    if (!hostsWithoutPort.isEmpty() && hostsWithoutPort.size() != addressAndPorts.size()) {
+      throw new MessageException(format("Entries in property %s must not mix 'host:port' and 'host'. Provide hosts without port only or hosts with port only.", property.getKey()));
     }
   }
 

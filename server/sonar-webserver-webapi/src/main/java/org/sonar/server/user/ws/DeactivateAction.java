@@ -20,36 +20,26 @@
 package org.sonar.server.user.ws;
 
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 import org.sonar.api.server.ws.Request;
 import org.sonar.api.server.ws.Response;
 import org.sonar.api.server.ws.WebService;
 import org.sonar.api.server.ws.WebService.NewAction;
-import org.sonar.api.utils.log.Logger;
-import org.sonar.api.utils.log.Loggers;
 import org.sonar.api.utils.text.JsonWriter;
 import org.sonar.db.DbClient;
 import org.sonar.db.DbSession;
-import org.sonar.db.organization.OrganizationDto;
-import org.sonar.db.organization.OrganizationHelper;
 import org.sonar.db.property.PropertyQuery;
 import org.sonar.db.user.UserDto;
-import org.sonar.server.exceptions.BadRequestException;
-import org.sonar.server.organization.DefaultOrganizationProvider;
 import org.sonar.server.user.UserSession;
 import org.sonar.server.user.index.UserIndexer;
 
-import static java.lang.String.format;
 import static java.util.Collections.singletonList;
 import static org.sonar.api.CoreProperties.DEFAULT_ISSUE_ASSIGNEE;
+import static org.sonar.db.permission.GlobalPermission.ADMINISTER;
 import static org.sonar.server.exceptions.BadRequestException.checkRequest;
 import static org.sonar.server.exceptions.NotFoundException.checkFound;
 
 public class DeactivateAction implements UsersWsAction {
-
-  private static final Logger LOGGER = Loggers.get(DeactivateAction.class);
 
   private static final String PARAM_LOGIN = "login";
 
@@ -57,15 +47,12 @@ public class DeactivateAction implements UsersWsAction {
   private final UserIndexer userIndexer;
   private final UserSession userSession;
   private final UserJsonWriter userWriter;
-  private final DefaultOrganizationProvider defaultOrganizationProvider;
 
-  public DeactivateAction(DbClient dbClient, UserIndexer userIndexer, UserSession userSession, UserJsonWriter userWriter,
-    DefaultOrganizationProvider defaultOrganizationProvider) {
+  public DeactivateAction(DbClient dbClient, UserIndexer userIndexer, UserSession userSession, UserJsonWriter userWriter) {
     this.dbClient = dbClient;
     this.userIndexer = userIndexer;
     this.userSession = userSession;
     this.userWriter = userWriter;
-    this.defaultOrganizationProvider = defaultOrganizationProvider;
   }
 
   @Override
@@ -109,6 +96,7 @@ public class DeactivateAction implements UsersWsAction {
       dbClient.userPropertiesDao().deleteByUser(dbSession, user);
       dbClient.almPatDao().deleteByUser(dbSession, user);
       dbClient.sessionTokensDao().deleteByUser(dbSession, user);
+      dbClient.userDismissedMessagesDao().deleteByUser(dbSession, user);
       dbClient.userDao().deactivateUser(dbSession, user);
       userIndexer.commitAndIndex(dbSession, user);
     }
@@ -134,18 +122,8 @@ public class DeactivateAction implements UsersWsAction {
   }
 
   private void ensureNotLastAdministrator(DbSession dbSession, UserDto user) {
-    List<OrganizationDto> problematicOrgs = new OrganizationHelper(dbClient).selectOrganizationsWithLastAdmin(dbSession, user.getUuid());
-    if (problematicOrgs.isEmpty()) {
-      return;
-    }
-    checkRequest(problematicOrgs.size() != 1 || !defaultOrganizationProvider.get().getUuid().equals(problematicOrgs.get(0).getUuid()),
-      "User is last administrator, and cannot be deactivated");
-    String keys = problematicOrgs
-      .stream()
-      .map(OrganizationDto::getKey)
-      .sorted()
-      .collect(Collectors.joining(", "));
-    throw BadRequestException.create(format("User '%s' is last administrator of organizations [%s], and cannot be deactivated", user.getLogin(), keys));
+    boolean isLastAdmin = dbClient.authorizationDao().countUsersWithGlobalPermissionExcludingUser(dbSession, ADMINISTER.getKey(), user.getUuid()) == 0;
+    checkRequest(!isLastAdmin, "User is last administrator, and cannot be deactivated");
   }
 
 }

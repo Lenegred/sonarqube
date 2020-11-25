@@ -35,6 +35,10 @@ import org.sonar.core.extension.ServiceLoaderWrapper;
 
 import static com.google.common.base.Preconditions.checkState;
 import static java.lang.String.format;
+import static org.sonar.process.ProcessProperties.Property.CLUSTER_ENABLED;
+import static org.sonar.process.ProcessProperties.Property.ES_PORT;
+import static org.sonar.process.ProcessProperties.Property.SEARCH_HOST;
+import static org.sonar.process.ProcessProperties.Property.SEARCH_PORT;
 
 /**
  * Constants shared by search, web server and app processes.
@@ -72,13 +76,12 @@ public class ProcessProperties {
     LOG_MAX_FILES("sonar.log.maxFiles"),
     LOG_CONSOLE("sonar.log.console"),
 
-    SEARCH_HOST("sonar.search.host", InetAddress.getLoopbackAddress().getHostAddress()),
-    SEARCH_PORT("sonar.search.port", "9001"),
-    SEARCH_HTTP_PORT("sonar.search.httpPort"),
-    SEARCH_JAVA_OPTS("sonar.search.javaOpts", "-Xmx512m -Xms512m -XX:+HeapDumpOnOutOfMemoryError"),
+    SEARCH_HOST("sonar.search.host"),
+    SEARCH_PORT("sonar.search.port"),
+    ES_PORT("sonar.es.port"),
+    SEARCH_JAVA_OPTS("sonar.search.javaOpts", "-Xmx512m -Xms512m -XX:MaxDirectMemorySize=256m -XX:+HeapDumpOnOutOfMemoryError"),
     SEARCH_JAVA_ADDITIONAL_OPTS("sonar.search.javaAdditionalOpts", ""),
     SEARCH_REPLICAS("sonar.search.replicas"),
-    SEARCH_MINIMUM_MASTER_NODES("sonar.search.minimumMasterNodes"),
     SEARCH_INITIAL_STATE_TIMEOUT("sonar.search.initialStateTimeout"),
 
     WEB_HOST("sonar.web.host"),
@@ -119,6 +122,13 @@ public class ProcessProperties {
     CLUSTER_NODE_NAME("sonar.cluster.node.name", "sonarqube-" + UUID.randomUUID().toString()),
     CLUSTER_NAME("sonar.cluster.name", "sonarqube"),
     CLUSTER_WEB_STARTUP_LEADER("sonar.cluster.web.startupLeader"),
+
+    // search node only settings
+    CLUSTER_ES_HOSTS("sonar.cluster.es.hosts"),
+    CLUSTER_NODE_SEARCH_HOST("sonar.cluster.node.search.host"),
+    CLUSTER_NODE_SEARCH_PORT("sonar.cluster.node.search.port"),
+    CLUSTER_NODE_ES_HOST("sonar.cluster.node.es.host"),
+    CLUSTER_NODE_ES_PORT("sonar.cluster.node.es.port"),
 
     AUTH_JWT_SECRET("sonar.auth.jwtBase64Hs256Secret"),
     SONAR_WEB_SSO_ENABLE("sonar.web.sso.enable", "false"),
@@ -224,7 +234,13 @@ public class ProcessProperties {
       props.setDefault(entry.getKey().toString(), entry.getValue().toString());
     }
 
-    fixPortIfZero(props, Property.SEARCH_HOST.getKey(), Property.SEARCH_PORT.getKey());
+    boolean clusterEnabled = props.valueAsBoolean(CLUSTER_ENABLED.getKey(), false);
+    if (!clusterEnabled) {
+      props.setDefault(SEARCH_HOST.getKey(), InetAddress.getLoopbackAddress().getHostAddress());
+      props.setDefault(SEARCH_PORT.getKey(), "9001");
+      fixPortIfZero(props, Property.SEARCH_HOST.getKey(), SEARCH_PORT.getKey());
+      fixEsTransportPortIfNull(props);
+    }
   }
 
   private Properties defaults() {
@@ -258,6 +274,15 @@ public class ProcessProperties {
       int allocatedPort = NetworkUtilsImpl.INSTANCE.getNextAvailablePort(address)
         .orElseThrow(() -> new IllegalStateException("Cannot resolve address [" + address + "] set by property [" + addressPropertyKey + "]"));
       props.set(portPropertyKey, String.valueOf(allocatedPort));
+    }
+  }
+
+  private static void fixEsTransportPortIfNull(Props props) {
+    String port = props.value(ES_PORT.getKey());
+    if (port == null) {
+      int allocatedPort = NetworkUtilsImpl.INSTANCE.getNextAvailablePort(InetAddress.getLoopbackAddress().getHostAddress())
+        .orElseThrow(() -> new IllegalStateException("Cannot resolve address for Elasticsearch TCP transport port"));
+      props.set(ES_PORT.getKey(), String.valueOf(allocatedPort));
     }
   }
 

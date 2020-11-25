@@ -25,14 +25,19 @@ With this configuration, one application node and one search node can be lost wi
 
 ### Network
 
-All servers, including the database server, must be co-located (geographical redundancy is not supported) and have static IP addresses (reference via hostname is not supported).  Network traffic should not be restricted between application and search nodes.
+All servers, including the database server, must be located within the same region and have static IP addresses (reference via hostname is not supported). Network traffic should not be restricted between application and search nodes.
 
 ### Servers
 
-You need a minimum of five servers (two application nodes and three search nodes) to form a SonarQube application cluster. You can add application nodes to increase computing capabilities. Servers can be virtual machines; it is not necessary to use physical machines.
+You need a minimum of five servers (two application nodes and three search nodes) to form a SonarQube application cluster. Servers can be virtual machines; it is not necessary to use physical machines. You can also add application nodes to increase computing capabilities. 
 
-The operating system requirements for servers are available on the [Requirements](/requirements/requirements/) page.  All application nodes should be identical in terms of hardware and software. Similarly, all search nodes should be identical to each other. Application and search nodes, however, can differ from one another. Generally, search nodes are configured with more CPU and RAM than application nodes.
+The operating system requirements for servers are available on the [Requirements](/requirements/requirements/) page. 
 
+All application nodes should be identical in terms of hardware and software. Similarly, all search nodes should be identical to each other. Application and search nodes, however, can differ from one another. Generally, search nodes are configured with more CPU and RAM than application nodes.
+
+Search nodes can be located in different availability zones, but they must be in the same region. In this case, each search node should be located in a separate availability zone to maintain availability in the event of a failure in one zone.
+
+#### **Example Machines**
 Here are the machines we used to perform our validation with a 200M issues database. You can use this as a minimum recommendation to build your cluster.
 
 - App Node made of [Amazon EC2 m4.xlarge](https://aws.amazon.com/ec2/instance-types/): 4 vCPUs, 16GB RAM
@@ -44,7 +49,7 @@ Supported database systems are available on the [Requirements](/requirements/req
 
 ### Load Balancer
 
-SonarSource does not provide specific recommendations for reverse proxy / load balancer or solution-specific configuration.  The general requirements to use with SonarQube Data Center Edition are:
+SonarSource does not provide specific recommendations for reverse proxy / load balancer or solution-specific configuration. The general requirements for SonarQube Data Center Edition are:
 
 - Ability to balance HTTP requests (load) between the application nodes configured in the SonarQube cluster.
 - If terminating HTTPS, meets the requirements set out in [Securing SonarQube Behind a Proxy](/setup/operate-server/).
@@ -72,7 +77,7 @@ echo -n "your_secret" | openssl dgst -sha256 -hmac "your_key" -binary | base64
 
 ### Sample Configuration
 
-The following example represents the minimal parameters required to configure a SonarQube cluster.  The example assumes:
+The following example represents a sample configuration of a SonarQube cluster.  The example assumes:
 
 - The VMs having IP addresses ip1 and ip2 (server1, server2) are application nodes
 - The VMs having IP addresses ip3, ip4, and ip5 (server3, server4 and server5) are search nodes
@@ -85,10 +90,11 @@ The configuration to be added to sonar.properties for each node is the following
 ```
 ...
 sonar.cluster.enabled=true
-sonar.cluster.hosts=ip1,ip2
-sonar.cluster.search.hosts=ip3,ip4,ip5
 sonar.cluster.node.type=application
 sonar.cluster.node.host=ip1
+sonar.cluster.node.port=9003
+sonar.cluster.hosts=ip1,ip2
+sonar.cluster.search.hosts=ip3:9001,ip4:9001,ip5:9001
 sonar.auth.jwtBase64Hs256Secret=YOURGENERATEDSECRET
 ...
 ```
@@ -97,10 +103,11 @@ sonar.auth.jwtBase64Hs256Secret=YOURGENERATEDSECRET
 ```
 ...
 sonar.cluster.enabled=true
-sonar.cluster.hosts=ip1,ip2
-sonar.cluster.search.hosts=ip3,ip4,ip5
 sonar.cluster.node.type=application
 sonar.cluster.node.host=ip2
+sonar.cluster.node.port=9003
+sonar.cluster.hosts=ip1,ip2
+sonar.cluster.search.hosts=ip3:9001,ip4:9001,ip5:9001
 sonar.auth.jwtBase64Hs256Secret=YOURGENERATEDSECRET
 ...
 ```
@@ -111,10 +118,12 @@ sonar.auth.jwtBase64Hs256Secret=YOURGENERATEDSECRET
 ```
 ...
 sonar.cluster.enabled=true
-sonar.cluster.search.hosts=ip3,ip4,ip5
 sonar.cluster.node.type=search
-sonar.cluster.node.host=ip3
-sonar.search.host=ip3
+sonar.cluster.node.search.host=ip3
+sonar.cluster.node.search.port=9001
+sonar.cluster.node.es.host=ip3
+sonar.cluster.node.es.port=9002
+sonar.cluster.es.hosts=ip3:9002,ip4:9002,ip5:9002
 ...
 ```
 
@@ -122,10 +131,12 @@ sonar.search.host=ip3
 ```
 ...
 sonar.cluster.enabled=true
-sonar.cluster.search.hosts=ip3,ip4,ip5
 sonar.cluster.node.type=search
-sonar.cluster.node.host=ip4
-sonar.search.host=ip4
+sonar.cluster.node.search.host=ip4
+sonar.cluster.node.search.port=9001
+sonar.cluster.node.es.host=ip4
+sonar.cluster.node.es.port=9002
+sonar.cluster.es.hosts=ip3:9002,ip4:9002,ip5:9002
 ...
 ```
 
@@ -133,10 +144,12 @@ sonar.search.host=ip4
 ```
 ...
 sonar.cluster.enabled=true
-sonar.cluster.search.hosts=ip3,ip4,ip5
 sonar.cluster.node.type=search
-sonar.cluster.node.host=ip5
-sonar.search.host=ip5
+sonar.cluster.node.search.host=ip5
+sonar.cluster.node.search.port=9001
+sonar.cluster.node.es.host=ip5
+sonar.cluster.node.es.port=9002
+sonar.cluster.es.hosts=ip3:9002,ip4:9002,ip5:9002
 ...
 ```
 
@@ -172,4 +185,4 @@ The following is an example of the default SonarQube cluster installation proces
 4. After all search nodes are running, start all application nodes.
 5. Configure the load balancer to proxy with both application nodes.
 
-Congratulations, you have a fully-functional SonarQube cluster.  Once these steps are complete, take a break and a coffee, then you can [Operate your Cluster](/setup/operate-cluster/).
+Congratulations, you have a fully-functional SonarQube cluster.  Once you've complete these steps, you can [Operate your Cluster](/setup/operate-cluster/).

@@ -36,7 +36,6 @@ import org.sonar.core.util.UuidFactory;
 import org.sonar.db.DbClient;
 import org.sonar.db.DbSession;
 import org.sonar.db.component.ComponentDto;
-import org.sonar.db.organization.DefaultTemplates;
 import org.sonar.db.permission.GroupPermissionDto;
 import org.sonar.db.permission.UserPermissionDto;
 import org.sonar.db.permission.template.PermissionTemplateCharacteristicDto;
@@ -54,7 +53,7 @@ import static java.lang.String.format;
 import static java.util.Collections.singletonList;
 import static org.sonar.api.security.DefaultGroups.isAnyone;
 import static org.sonar.api.web.UserRole.PUBLIC_PERMISSIONS;
-import static org.sonar.db.permission.OrganizationPermission.SCAN;
+import static org.sonar.db.permission.GlobalPermission.SCAN;
 
 @ServerSide
 public class PermissionTemplateService {
@@ -74,12 +73,12 @@ public class PermissionTemplateService {
     this.uuidFactory = uuidFactory;
   }
 
-  public boolean wouldUserHaveScanPermissionWithDefaultTemplate(DbSession dbSession, String organizationUuid, @Nullable String userUuid, String projectKey) {
-    if (userSession.hasPermission(SCAN, organizationUuid)) {
+  public boolean wouldUserHaveScanPermissionWithDefaultTemplate(DbSession dbSession, @Nullable String userUuid, String projectKey) {
+    if (userSession.hasPermission(SCAN)) {
       return true;
     }
 
-    ComponentDto dto = new ComponentDto().setOrganizationUuid(organizationUuid).setDbKey(projectKey).setQualifier(Qualifiers.PROJECT);
+    ComponentDto dto = new ComponentDto().setDbKey(projectKey).setQualifier(Qualifiers.PROJECT);
     PermissionTemplateDto template = findTemplate(dbSession, dto);
     if (template == null) {
       return false;
@@ -131,14 +130,13 @@ public class PermissionTemplateService {
     dbClient.userPermissionDao().deleteProjectPermissions(dbSession, project.uuid());
 
     List<PermissionTemplateUserDto> usersPermissions = dbClient.permissionTemplateDao().selectUserPermissionsByTemplateId(dbSession, template.getUuid());
-    String organizationUuid = template.getOrganizationUuid();
     Map<String, String> userDtoMap = dbClient.userDao().selectByUuids(dbSession, usersPermissions.stream().map(PermissionTemplateUserDto::getUserUuid).collect(Collectors.toSet()))
       .stream().collect(Collectors.toMap(UserDto::getUuid, UserDto::getUuid));
     usersPermissions
       .stream()
       .filter(up -> permissionValidForProject(project, up.getPermission()))
       .forEach(up -> {
-        UserPermissionDto dto = new UserPermissionDto(uuidFactory.create(), organizationUuid, up.getPermission(), userDtoMap.get(up.getUserUuid()), project.uuid());
+        UserPermissionDto dto = new UserPermissionDto(uuidFactory.create(), up.getPermission(), userDtoMap.get(up.getUserUuid()), project.uuid());
         dbClient.userPermissionDao().insert(dbSession, dto);
       });
 
@@ -150,7 +148,6 @@ public class PermissionTemplateService {
       .forEach(gp -> {
         GroupPermissionDto dto = new GroupPermissionDto()
           .setUuid(uuidFactory.create())
-          .setOrganizationUuid(organizationUuid)
           .setGroupUuid(isAnyone(gp.getGroupName()) ? null : gp.getGroupUuid())
           .setRole(gp.getPermission())
           .setComponentUuid(project.uuid());
@@ -170,7 +167,7 @@ public class PermissionTemplateService {
         .filter(up -> permissionValidForProject(project, up.getPermission()))
         .filter(characteristic -> !permissionsForCurrentUserAlreadyInDb.contains(characteristic.getPermission()))
         .forEach(c -> {
-          UserPermissionDto dto = new UserPermissionDto(uuidFactory.create(), organizationUuid, c.getPermission(), userDto.getUuid(), project.uuid());
+          UserPermissionDto dto = new UserPermissionDto(uuidFactory.create(), c.getPermission(), userDto.getUuid(), project.uuid());
           dbClient.userPermissionDao().insert(dbSession, dto);
         });
     }
@@ -190,8 +187,7 @@ public class PermissionTemplateService {
    */
   @CheckForNull
   private PermissionTemplateDto findTemplate(DbSession dbSession, ComponentDto component) {
-    String organizationUuid = component.getOrganizationUuid();
-    List<PermissionTemplateDto> allPermissionTemplates = dbClient.permissionTemplateDao().selectAll(dbSession, organizationUuid, null);
+    List<PermissionTemplateDto> allPermissionTemplates = dbClient.permissionTemplateDao().selectAll(dbSession, null);
     List<PermissionTemplateDto> matchingTemplates = new ArrayList<>();
     for (PermissionTemplateDto permissionTemplateDto : allPermissionTemplates) {
       String keyPattern = permissionTemplateDto.getKeyPattern();
@@ -204,22 +200,18 @@ public class PermissionTemplateService {
       return matchingTemplates.get(0);
     }
 
-    DefaultTemplates defaultTemplates = dbClient.organizationDao().getDefaultTemplates(dbSession, organizationUuid)
-      .orElseThrow(() -> new IllegalStateException(
-        format("No Default templates defined for organization with uuid '%s'", organizationUuid)));
-
     String qualifier = component.qualifier();
-    ResolvedDefaultTemplates resolvedDefaultTemplates = defaultTemplatesResolver.resolve(defaultTemplates);
+    ResolvedDefaultTemplates resolvedDefaultTemplates = defaultTemplatesResolver.resolve(dbSession);
     switch (qualifier) {
       case Qualifiers.PROJECT:
         return dbClient.permissionTemplateDao().selectByUuid(dbSession, resolvedDefaultTemplates.getProject());
       case Qualifiers.VIEW:
         String portDefaultTemplateUuid = resolvedDefaultTemplates.getPortfolio().orElseThrow(
-          () -> new IllegalStateException("Attempt to create a view when Governance plugin is not installed"));
+          () -> new IllegalStateException("Failed to find default template for portfolios"));
         return dbClient.permissionTemplateDao().selectByUuid(dbSession, portDefaultTemplateUuid);
       case Qualifiers.APP:
         String appDefaultTemplateUuid = resolvedDefaultTemplates.getApplication().orElseThrow(
-          () -> new IllegalStateException("Attempt to create a view when Governance plugin is not installed"));
+          () -> new IllegalStateException("Failed to find default template for applications"));
         return dbClient.permissionTemplateDao().selectByUuid(dbSession, appDefaultTemplateUuid);
       default:
         throw new IllegalArgumentException(format("Qualifier '%s' is not supported", qualifier));

@@ -34,7 +34,6 @@ import org.sonar.server.exceptions.BadRequestException;
 import org.sonar.server.exceptions.ForbiddenException;
 import org.sonar.server.exceptions.NotFoundException;
 import org.sonar.server.organization.TestDefaultOrganizationProvider;
-import org.sonar.server.organization.TestOrganizationFlags;
 import org.sonar.server.tester.UserSessionRule;
 import org.sonar.server.user.NewUser;
 import org.sonar.server.user.NewUserNotifier;
@@ -51,8 +50,6 @@ import static org.sonar.db.user.UserTesting.newLocalUser;
 
 public class ChangePasswordActionTest {
 
-  private System2 system2 = new AlwaysIncreasingSystem2();
-
   @Rule
   public ExpectedException expectedException = ExpectedException.none();
   @Rule
@@ -62,12 +59,12 @@ public class ChangePasswordActionTest {
   @Rule
   public UserSessionRule userSessionRule = UserSessionRule.standalone().logIn();
 
-  private TestOrganizationFlags organizationFlags = TestOrganizationFlags.standalone();
+  private TestDefaultOrganizationProvider testDefaultOrganizationProvider = TestDefaultOrganizationProvider.from(db);
+
   private CredentialsLocalAuthentication localAuthentication = new CredentialsLocalAuthentication(db.getDbClient());
 
-  private UserUpdater userUpdater = new UserUpdater(system2, mock(NewUserNotifier.class), db.getDbClient(), new UserIndexer(db.getDbClient(), es.client()),
-    organizationFlags,
-    TestDefaultOrganizationProvider.from(db),
+  private UserUpdater userUpdater = new UserUpdater(
+    mock(NewUserNotifier.class), db.getDbClient(), new UserIndexer(db.getDbClient(), es.client()), testDefaultOrganizationProvider,
     new DefaultGroupFinder(db.getDbClient()),
     new MapSettings().asConfig(),
     localAuthentication);
@@ -76,7 +73,7 @@ public class ChangePasswordActionTest {
 
   @Before
   public void setUp() {
-    db.users().insertDefaultGroup(db.getDefaultOrganization(), "sonar-users");
+    db.users().insertDefaultGroup();
   }
 
   @Test

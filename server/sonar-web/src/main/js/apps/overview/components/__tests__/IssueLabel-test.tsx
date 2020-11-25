@@ -21,8 +21,8 @@ import { shallow } from 'enzyme';
 import * as React from 'react';
 import { mockPullRequest } from '../../../../helpers/mocks/branch-like';
 import { mockComponent, mockMeasureEnhanced, mockMetric } from '../../../../helpers/testMocks';
+import { IssueType } from '../../../../types/issues';
 import { MetricKey } from '../../../../types/metrics';
-import { IssueType } from '../../utils';
 import { IssueLabel, IssueLabelProps } from '../IssueLabel';
 
 it('should render correctly for bugs', () => {
@@ -55,7 +55,7 @@ it('should render correctly for vulnerabilities', () => {
 });
 
 it('should render correctly for hotspots', () => {
-  const docTooltip = Promise.resolve({ default: 'tooltip text' });
+  const helpTooltip = 'tooltip text';
   const type = IssueType.SecurityHotspot;
   const measures = [
     mockMeasureEnhanced({ metric: mockMetric({ key: MetricKey.security_hotspots }) }),
@@ -63,14 +63,14 @@ it('should render correctly for hotspots', () => {
   ];
   expect(
     shallowRender({
-      docTooltip,
+      helpTooltip,
       measures,
       type
     })
   ).toMatchSnapshot();
   expect(
     shallowRender({
-      docTooltip,
+      helpTooltip,
       measures,
       type,
       useDiffMetric: true

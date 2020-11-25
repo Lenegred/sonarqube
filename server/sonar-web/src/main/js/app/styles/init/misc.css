@@ -179,9 +179,16 @@ th.hide-overflow {
 .big-padded-top {
   padding-top: calc(2 * var(--gridSize));
 }
+.big-padded-bottom {
+  padding-bottom: calc(2 * var(--gridSize));
+}
 
 .big-padded-right {
   padding-right: calc(2 * var(--gridSize));
+}
+
+.big-padded-left {
+  padding-left: calc(2 * var(--gridSize));
 }
 
 .huge-padded-top {
@@ -427,7 +434,12 @@ th.huge-spacer-right {
 
 .display-flex-start {
   display: flex !important;
-  align-items: flex-start;
+  align-items: flex-start !important;
+}
+
+.display-flex-end {
+  display: flex !important;
+  align-items: flex-end;
 }
 
 .display-flex-wrap {
@@ -579,4 +591,8 @@ th.huge-spacer-right {
   background-color: var(--leakPrimaryColor);
   border: 1px solid var(--leakSecondaryColor);
   padding: 4px 6px;
+}
+
+.break-word {
+  word-break: break-word;
 }

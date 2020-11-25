@@ -31,8 +31,8 @@ import {
 } from 'sonar-ui-common/helpers/query';
 import { scrollToElement } from 'sonar-ui-common/helpers/scrolling';
 import { get, save } from 'sonar-ui-common/helpers/storage';
-import { searchMembers } from '../../api/organizations';
 import { searchUsers } from '../../api/users';
+import { SecurityStandard, StandardType } from '../../types/security';
 
 export interface Query {
   assigned: boolean;
@@ -54,6 +54,7 @@ export interface Query {
   resolved: boolean;
   rules: string[];
   sansTop25: string[];
+  scopes: string[];
   severities: string[];
   sinceLeakPeriod: boolean;
   sonarsourceSecurity: string[];
@@ -64,11 +65,11 @@ export interface Query {
 }
 
 export const STANDARDS = 'standards';
-export const STANDARD_TYPES: T.StandardType[] = [
-  'owaspTop10',
-  'sansTop25',
-  'cwe',
-  'sonarsourceSecurity'
+export const STANDARD_TYPES: StandardType[] = [
+  SecurityStandard.OWASP_TOP10,
+  SecurityStandard.SANS_TOP25,
+  SecurityStandard.CWE,
+  SecurityStandard.SONARSOURCE
 ];
 
 // allow sorting by CREATION_DATE only
@@ -86,7 +87,7 @@ export function parseQuery(query: T.RawQuery): Query {
     createdInLast: parseAsString(query.createdInLast),
     cwe: parseAsArray(query.cwe, parseAsString),
     directories: parseAsArray(query.directories, parseAsString),
-    files: parseAsArray(query.fileUuids, parseAsString),
+    files: parseAsArray(query.files, parseAsString),
     issues: parseAsArray(query.issues, parseAsString),
     languages: parseAsArray(query.languages, parseAsString),
     modules: parseAsArray(query.moduleUuids, parseAsString),
@@ -96,6 +97,7 @@ export function parseQuery(query: T.RawQuery): Query {
     resolved: parseAsBoolean(query.resolved),
     rules: parseAsArray(query.rules, parseAsString),
     sansTop25: parseAsArray(query.sansTop25, parseAsString),
+    scopes: parseAsArray(query.scopes, parseAsString),
     severities: parseAsArray(query.severities, parseAsString),
     sinceLeakPeriod: parseAsBoolean(query.sinceLeakPeriod, false),
     sonarsourceSecurity: parseAsArray(query.sonarsourceSecurity, parseAsString),
@@ -123,7 +125,7 @@ export function serializeQuery(query: Query): T.RawQuery {
     createdInLast: serializeString(query.createdInLast),
     cwe: serializeStringArray(query.cwe),
     directories: serializeStringArray(query.directories),
-    fileUuids: serializeStringArray(query.files),
+    files: serializeStringArray(query.files),
     issues: serializeStringArray(query.issues),
     languages: serializeStringArray(query.languages),
     moduleUuids: serializeStringArray(query.modules),
@@ -134,6 +136,7 @@ export function serializeQuery(query: Query): T.RawQuery {
     rules: serializeStringArray(query.rules),
     s: serializeString(query.sort),
     sansTop25: serializeStringArray(query.sansTop25),
+    scopes: serializeStringArray(query.scopes),
     severities: serializeStringArray(query.severities),
     sinceLeakPeriod: query.sinceLeakPeriod ? 'true' : undefined,
     sonarsourceSecurity: serializeStringArray(query.sonarsourceSecurity),
@@ -158,7 +161,6 @@ export interface Facet {
 
 export function mapFacet(facet: string) {
   const propertyMapping: T.Dict<string> = {
-    files: 'fileUuids',
     modules: 'moduleUuids'
   };
   return propertyMapping[facet] || facet;
@@ -171,7 +173,6 @@ export function parseFacets(facets: RawFacet[]): T.Dict<Facet> {
 
   // for readability purpose
   const propertyMapping: T.Dict<string> = {
-    fileUuids: 'files',
     moduleUuids: 'modules'
   };
 
@@ -210,15 +211,12 @@ export interface ReferencedRule {
 
 export const searchAssignees = (
   query: string,
-  organization: string | undefined,
   page = 1
 ): Promise<{ paging: T.Paging; results: T.UserBase[] }> => {
-  return organization
-    ? searchMembers({ organization, p: page, ps: 50, q: query }).then(({ paging, users }) => ({
-        paging,
-        results: users
-      }))
-    : searchUsers({ p: page, q: query }).then(({ paging, users }) => ({ paging, results: users }));
+  return searchUsers({ p: page, q: query }).then(({ paging, users }) => ({
+    paging,
+    results: users
+  }));
 };
 
 const LOCALSTORAGE_MY = 'my';
@@ -287,13 +285,13 @@ export function shouldOpenStandardsFacet(
 export function shouldOpenStandardsChildFacet(
   openFacets: T.Dict<boolean>,
   query: Partial<Query>,
-  standardType: T.StandardType
+  standardType: SecurityStandard
 ): boolean {
   const filter = query[standardType];
   return (
     openFacets[STANDARDS] !== false &&
     (openFacets[standardType] ||
-      (standardType !== 'cwe' && filter !== undefined && filter.length > 0))
+      (standardType !== SecurityStandard.CWE && filter !== undefined && filter.length > 0))
   );
 }
 
@@ -303,7 +301,7 @@ export function shouldOpenSonarSourceSecurityFacet(
 ): boolean {
   // Open it by default if the parent is open, and no other standard is open.
   return (
-    shouldOpenStandardsChildFacet(openFacets, query, 'sonarsourceSecurity') ||
+    shouldOpenStandardsChildFacet(openFacets, query, SecurityStandard.SONARSOURCE) ||
     (shouldOpenStandardsFacet(openFacets, query) && !isOneStandardChildFacetOpen(openFacets, query))
   );
 }

@@ -18,9 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 import * as React from 'react';
-import { translate } from 'sonar-ui-common/helpers/l10n';
 import { createGitlabConfiguration, updateGitlabConfiguration } from '../../../../api/alm-settings';
-import { AlmKeys, GitlabBindingDefinition } from '../../../../types/alm-settings';
+import {
+  AlmKeys,
+  AlmSettingsBindingStatus,
+  GitlabBindingDefinition
+} from '../../../../types/alm-settings';
 import { ALM_INTEGRATION } from '../AdditionalCategoryKeys';
 import CategoryDefinitionsList from '../CategoryDefinitionsList';
 import AlmTab from './AlmTab';
@@ -30,9 +33,11 @@ export interface GitlabTabProps {
   branchesEnabled: boolean;
   component?: T.Component;
   definitions: GitlabBindingDefinition[];
+  definitionStatus: T.Dict<AlmSettingsBindingStatus>;
   loadingAlmDefinitions: boolean;
   loadingProjectCount: boolean;
   multipleAlmEnabled: boolean;
+  onCheck: (definitionKey: string) => void;
   onDelete: (definitionKey: string) => void;
   onUpdateDefinitions: () => void;
 }
@@ -43,6 +48,7 @@ export default function GitlabTab(props: GitlabTabProps) {
     component,
     multipleAlmEnabled,
     definitions,
+    definitionStatus,
     loadingAlmDefinitions,
     loadingProjectCount
   } = props;
@@ -52,29 +58,18 @@ export default function GitlabTab(props: GitlabTabProps) {
       {branchesEnabled && (
         <>
           <AlmTab
-            additionalColumnsHeaders={[
-              translate('settings.almintegration.table.column.gitlab.url')
-            ]}
-            additionalColumnsKeys={['url']}
             alm={AlmKeys.GitLab}
             createConfiguration={createGitlabConfiguration}
             defaultBinding={{ key: '', personalAccessToken: '', url: '' }}
             definitions={definitions}
-            features={[
-              {
-                name: translate('settings.almintegration.feature.mr_decoration.title'),
-                active: definitions.length > 0,
-                description: translate('settings.almintegration.feature.mr_decoration.description'),
-                inactiveReason: translate('settings.almintegration.feature.need_at_least_1_binding')
-              }
-            ]}
+            definitionStatus={definitionStatus}
             form={childProps => <GitlabForm {...childProps} />}
             loadingAlmDefinitions={loadingAlmDefinitions}
             loadingProjectCount={loadingProjectCount}
             multipleAlmEnabled={multipleAlmEnabled}
+            onCheck={props.onCheck}
             onDelete={props.onDelete}
             onUpdateDefinitions={props.onUpdateDefinitions}
-            optionalFields={['url']}
             updateConfiguration={updateGitlabConfiguration}
           />
 

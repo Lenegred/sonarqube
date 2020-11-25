@@ -54,7 +54,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.sonar.api.web.UserRole.ADMIN;
-import static org.sonar.db.permission.OrganizationPermission.ADMINISTER;
+import static org.sonar.db.permission.GlobalPermission.ADMINISTER;
 import static org.sonar.db.user.UserTesting.newUserDto;
 import static org.sonar.server.component.TestComponentFinder.from;
 import static org.sonarqube.ws.client.project.ProjectsWsParameters.PARAM_PROJECT;
@@ -87,7 +87,7 @@ public class DeleteActionTest {
   @Test
   public void organization_administrator_deletes_project_by_key() {
     ComponentDto project = componentDbTester.insertPrivateProject();
-    userSessionRule.logIn().addPermission(ADMINISTER, project.getOrganizationUuid());
+    userSessionRule.logIn().addPermission(ADMINISTER);
 
     call(tester.newRequest().setParam(PARAM_PROJECT, project.getDbKey()));
 

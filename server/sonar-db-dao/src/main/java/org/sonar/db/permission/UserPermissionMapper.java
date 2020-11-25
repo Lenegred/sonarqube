@@ -31,7 +31,7 @@ public interface UserPermissionMapper {
   List<String> selectUserUuidsByQuery(@Param("query") PermissionQuery query);
 
   /**
-   * Fetch user ids based on permission query and only in a specific scope (global permissions only, organization permissions only or project permissions only)
+   * Fetch user ids based on permission query and only in a specific scope (global permissions only or project permissions only)
    */
   List<String> selectUserUuidsByQueryAndScope(@Param("query") PermissionQuery query);
 
@@ -52,10 +52,9 @@ public interface UserPermissionMapper {
    */
   Set<String> selectUserUuidsWithPermissionOnProjectBut(@Param("projectUuid") String projectUuid, @Param("permission") String permission);
 
-  void insert(UserPermissionDto dto);
+  void insert(@Param("dto")UserPermissionDto dto);
 
-  void deleteGlobalPermission(@Param("userUuid") String userUuid, @Param("permission") String permission,
-    @Param("organizationUuid") String organizationUuid);
+  void deleteGlobalPermission(@Param("userUuid") String userUuid, @Param("permission") String permission);
 
   void deleteProjectPermission(@Param("userUuid") String userUuid, @Param("permission") String permission,
     @Param("projectUuid") String projectUuid);
@@ -64,13 +63,9 @@ public interface UserPermissionMapper {
 
   int deleteProjectPermissionOfAnyUser(@Param("projectUuid") String projectUuid, @Param("permission") String permission);
 
-  List<String> selectGlobalPermissionsOfUser(@Param("userUuid") String userUuid, @Param("organizationUuid") String organizationUuid);
+  List<String> selectGlobalPermissionsOfUser(@Param("userUuid") String userUuid);
 
   List<String> selectProjectPermissionsOfUser(@Param("userUuid") String userUuid, @Param("projectUuid") String projectUuid);
-
-  void deleteByOrganization(@Param("organizationUuid") String organizationUuid);
-
-  void deleteOrganizationMemberPermissions(@Param("organizationUuid") String organizationUuid, @Param("userUuid") String userUuid);
 
   void deleteByUserUuid(@Param("userUuid") String userUuid);
 }

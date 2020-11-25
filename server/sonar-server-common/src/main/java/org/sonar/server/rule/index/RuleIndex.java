@@ -20,7 +20,6 @@
 package org.sonar.server.rule.index;
 
 import com.google.common.base.Joiner;
-import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -32,23 +31,22 @@ import java.util.function.Function;
 import javax.annotation.Nullable;
 import org.apache.commons.lang.StringUtils;
 import org.apache.lucene.search.join.ScoreMode;
-import org.elasticsearch.action.search.SearchRequestBuilder;
+import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.index.query.BoolQueryBuilder;
 import org.elasticsearch.index.query.Operator;
 import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
-import org.elasticsearch.index.query.TermsQueryBuilder;
 import org.elasticsearch.join.aggregations.JoinAggregationBuilders;
 import org.elasticsearch.join.query.HasParentQueryBuilder;
 import org.elasticsearch.join.query.JoinQueryBuilders;
 import org.elasticsearch.search.aggregations.AggregationBuilder;
 import org.elasticsearch.search.aggregations.AggregationBuilders;
 import org.elasticsearch.search.aggregations.BucketOrder;
-import org.elasticsearch.search.aggregations.bucket.filter.FilterAggregationBuilder;
 import org.elasticsearch.search.aggregations.bucket.terms.IncludeExclude;
 import org.elasticsearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
+import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.elasticsearch.search.sort.FieldSortBuilder;
 import org.elasticsearch.search.sort.SortBuilders;
 import org.elasticsearch.search.sort.SortOrder;
@@ -57,7 +55,6 @@ import org.sonar.api.rule.Severity;
 import org.sonar.api.rules.RuleType;
 import org.sonar.api.utils.System2;
 import org.sonar.core.util.stream.MoreCollectors;
-import org.sonar.db.organization.OrganizationDto;
 import org.sonar.db.qualityprofile.QProfileDto;
 import org.sonar.server.es.EsClient;
 import org.sonar.server.es.EsUtils;
@@ -77,10 +74,13 @@ import static org.elasticsearch.index.query.QueryBuilders.matchAllQuery;
 import static org.elasticsearch.index.query.QueryBuilders.matchPhraseQuery;
 import static org.elasticsearch.index.query.QueryBuilders.matchQuery;
 import static org.elasticsearch.index.query.QueryBuilders.termsQuery;
+import static org.sonar.api.rules.RuleType.SECURITY_HOTSPOT;
+import static org.sonar.api.rules.RuleType.VULNERABILITY;
 import static org.sonar.server.es.EsUtils.SCROLL_TIME_IN_MINUTES;
 import static org.sonar.server.es.EsUtils.optimizeScrollRequest;
 import static org.sonar.server.es.EsUtils.scrollIds;
 import static org.sonar.server.es.IndexType.FIELD_INDEX_TYPE;
+import static org.sonar.server.es.StickyFacetBuilder.FACET_DEFAULT_SIZE;
 import static org.sonar.server.es.newindex.DefaultIndexSettingsElement.ENGLISH_HTML_ANALYZER;
 import static org.sonar.server.es.newindex.DefaultIndexSettingsElement.SEARCH_GRAMS_ANALYZER;
 import static org.sonar.server.es.newindex.DefaultIndexSettingsElement.SEARCH_WORDS_ANALYZER;
@@ -90,8 +90,6 @@ import static org.sonar.server.rule.index.RuleIndexDefinition.FIELD_ACTIVE_RULE_
 import static org.sonar.server.rule.index.RuleIndexDefinition.FIELD_ACTIVE_RULE_SEVERITY;
 import static org.sonar.server.rule.index.RuleIndexDefinition.FIELD_RULE_CREATED_AT;
 import static org.sonar.server.rule.index.RuleIndexDefinition.FIELD_RULE_CWE;
-import static org.sonar.server.rule.index.RuleIndexDefinition.FIELD_RULE_EXTENSION_SCOPE;
-import static org.sonar.server.rule.index.RuleIndexDefinition.FIELD_RULE_EXTENSION_TAGS;
 import static org.sonar.server.rule.index.RuleIndexDefinition.FIELD_RULE_HTML_DESCRIPTION;
 import static org.sonar.server.rule.index.RuleIndexDefinition.FIELD_RULE_INTERNAL_KEY;
 import static org.sonar.server.rule.index.RuleIndexDefinition.FIELD_RULE_IS_EXTERNAL;
@@ -106,12 +104,12 @@ import static org.sonar.server.rule.index.RuleIndexDefinition.FIELD_RULE_SANS_TO
 import static org.sonar.server.rule.index.RuleIndexDefinition.FIELD_RULE_SEVERITY;
 import static org.sonar.server.rule.index.RuleIndexDefinition.FIELD_RULE_SONARSOURCE_SECURITY;
 import static org.sonar.server.rule.index.RuleIndexDefinition.FIELD_RULE_STATUS;
+import static org.sonar.server.rule.index.RuleIndexDefinition.FIELD_RULE_TAGS;
 import static org.sonar.server.rule.index.RuleIndexDefinition.FIELD_RULE_TEMPLATE_KEY;
 import static org.sonar.server.rule.index.RuleIndexDefinition.FIELD_RULE_TYPE;
 import static org.sonar.server.rule.index.RuleIndexDefinition.FIELD_RULE_UPDATED_AT;
 import static org.sonar.server.rule.index.RuleIndexDefinition.TYPE_ACTIVE_RULE;
 import static org.sonar.server.rule.index.RuleIndexDefinition.TYPE_RULE;
-import static org.sonar.server.rule.index.RuleIndexDefinition.TYPE_RULE_EXTENSION;
 
 /**
  * The unique entry-point to interact with Elasticsearch index "rules".
@@ -150,39 +148,40 @@ public class RuleIndex {
   }
 
   public SearchIdResult<String> search(RuleQuery query, SearchOptions options) {
-    SearchRequestBuilder esSearch = client
-      .prepareSearch(TYPE_RULE);
+    SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
 
     QueryBuilder qb = buildQuery(query);
     Map<String, QueryBuilder> filters = buildFilters(query);
 
     if (!options.getFacets().isEmpty()) {
       for (AggregationBuilder aggregation : getFacets(query, options, qb, filters).values()) {
-        esSearch.addAggregation(aggregation);
+        sourceBuilder.aggregation(aggregation);
       }
     }
 
-    setSorting(query, esSearch);
-    setPagination(options, esSearch);
+    setSorting(query, sourceBuilder);
+    setPagination(options, sourceBuilder);
 
     BoolQueryBuilder fb = boolQuery();
     for (QueryBuilder filterBuilder : filters.values()) {
       fb.must(filterBuilder);
     }
 
-    esSearch.setQuery(boolQuery().must(qb).filter(fb));
-    return new SearchIdResult<>(esSearch.get(), input -> input, system2.getDefaultTimeZone());
+    sourceBuilder.query(boolQuery().must(qb).filter(fb));
+
+    SearchRequest esSearch = EsClient.prepareSearch(TYPE_RULE)
+      .source(sourceBuilder);
+
+    return new SearchIdResult<>(client.search(esSearch), input -> input, system2.getDefaultTimeZone());
   }
 
   /**
    * Return all rule uuids matching the search query, without pagination nor facets
    */
   public Iterator<String> searchAll(RuleQuery query) {
-    SearchRequestBuilder esSearch = client
-      .prepareSearch(TYPE_RULE)
-      .setScroll(TimeValue.timeValueMinutes(SCROLL_TIME_IN_MINUTES));
+    SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
 
-    optimizeScrollRequest(esSearch);
+    optimizeScrollRequest(sourceBuilder);
     QueryBuilder qb = buildQuery(query);
     Map<String, QueryBuilder> filters = buildFilters(query);
 
@@ -191,8 +190,13 @@ public class RuleIndex {
       fb.must(filterBuilder);
     }
 
-    esSearch.setQuery(boolQuery().must(qb).filter(fb));
-    SearchResponse response = esSearch.get();
+    sourceBuilder.query(boolQuery().must(qb).filter(fb));
+
+    SearchRequest esSearch = EsClient.prepareSearch(TYPE_RULE)
+      .scroll(TimeValue.timeValueMinutes(SCROLL_TIME_IN_MINUTES))
+      .source(sourceBuilder);
+
+    SearchResponse response = client.search(esSearch);
     return scrollIds(client, response, i -> i);
   }
 
@@ -213,13 +217,13 @@ public class RuleIndex {
       BoolQueryBuilder textQuery = boolQuery();
       JavaTokenizer.split(queryString)
         .stream().map(token -> boolQuery().should(
-          matchQuery(
-            SEARCH_GRAMS_ANALYZER.subField(FIELD_RULE_NAME),
-            StringUtils.left(token, DefaultIndexSettings.MAXIMUM_NGRAM_LENGTH)).boost(20f))
-          .should(
-            matchPhraseQuery(
-              ENGLISH_HTML_ANALYZER.subField(FIELD_RULE_HTML_DESCRIPTION),
-              token).boost(3f)))
+        matchQuery(
+          SEARCH_GRAMS_ANALYZER.subField(FIELD_RULE_NAME),
+          StringUtils.left(token, DefaultIndexSettings.MAXIMUM_NGRAM_LENGTH)).boost(20f))
+        .should(
+          matchPhraseQuery(
+            ENGLISH_HTML_ANALYZER.subField(FIELD_RULE_HTML_DESCRIPTION),
+            token).boost(3f)))
         .forEach(textQuery::must);
       qb.should(textQuery.boost(20f));
     }
@@ -281,22 +285,30 @@ public class RuleIndex {
 
     if (isNotEmpty(query.getCwe())) {
       filters.put(FIELD_RULE_CWE,
-        QueryBuilders.termsQuery(FIELD_RULE_CWE, query.getCwe()));
+        boolQuery()
+          .must(QueryBuilders.termsQuery(FIELD_RULE_CWE, query.getCwe()))
+          .must(QueryBuilders.termsQuery(FIELD_RULE_TYPE, VULNERABILITY.name(), SECURITY_HOTSPOT.name())));
     }
 
     if (isNotEmpty(query.getOwaspTop10())) {
       filters.put(FIELD_RULE_OWASP_TOP_10,
-        QueryBuilders.termsQuery(FIELD_RULE_OWASP_TOP_10, query.getOwaspTop10()));
+        boolQuery()
+          .must(QueryBuilders.termsQuery(FIELD_RULE_OWASP_TOP_10, query.getOwaspTop10()))
+          .must(QueryBuilders.termsQuery(FIELD_RULE_TYPE, VULNERABILITY.name(), SECURITY_HOTSPOT.name())));
     }
 
     if (isNotEmpty(query.getSansTop25())) {
       filters.put(FIELD_RULE_SANS_TOP_25,
-        QueryBuilders.termsQuery(FIELD_RULE_SANS_TOP_25, query.getSansTop25()));
+        boolQuery()
+          .must(QueryBuilders.termsQuery(FIELD_RULE_SANS_TOP_25, query.getSansTop25()))
+          .must(QueryBuilders.termsQuery(FIELD_RULE_TYPE, VULNERABILITY.name(), SECURITY_HOTSPOT.name())));
     }
 
     if (isNotEmpty(query.getSonarsourceSecurity())) {
       filters.put(FIELD_RULE_SONARSOURCE_SECURITY,
-        QueryBuilders.termsQuery(FIELD_RULE_SONARSOURCE_SECURITY, query.getSonarsourceSecurity()));
+        boolQuery()
+          .must(QueryBuilders.termsQuery(FIELD_RULE_SONARSOURCE_SECURITY, query.getSonarsourceSecurity()))
+          .must(QueryBuilders.termsQuery(FIELD_RULE_TYPE, VULNERABILITY.name(), SECURITY_HOTSPOT.name())));
     }
 
     if (StringUtils.isNotEmpty(query.getKey())) {
@@ -305,8 +317,7 @@ public class RuleIndex {
     }
 
     if (isNotEmpty(query.getTags())) {
-      filters.put(FIELD_RULE_EXTENSION_TAGS,
-        buildTagsFilter(query.getTags(), query.getOrganization()));
+      filters.put(FIELD_RULE_TAGS, buildTagsFilter(query.getTags()));
     }
 
     Collection<RuleType> types = query.getTypes();
@@ -376,14 +387,11 @@ public class RuleIndex {
     return filters;
   }
 
-  private static BoolQueryBuilder buildTagsFilter(Collection<String> tags, OrganizationDto organization) {
+  private static BoolQueryBuilder buildTagsFilter(Collection<String> tags) {
     BoolQueryBuilder q = boolQuery();
-    tags.stream()
-      .map(tag -> boolQuery()
-        .filter(QueryBuilders.termQuery(FIELD_RULE_EXTENSION_TAGS, tag))
-        .filter(termsQuery(FIELD_RULE_EXTENSION_SCOPE, RuleExtensionScope.system().getScope(), RuleExtensionScope.organization(organization).getScope())))
-      .map(childQuery -> JoinQueryBuilders.hasChildQuery(TYPE_RULE_EXTENSION.getName(), childQuery, ScoreMode.None))
-      .forEach(q::should);
+    for (String tag : tags) {
+      q.should(boolQuery().filter(QueryBuilders.termQuery(FIELD_RULE_TAGS, tag)));
+    }
     return q;
   }
 
@@ -449,23 +457,8 @@ public class RuleIndex {
     }
     if (options.getFacets().contains(FACET_TAGS) || options.getFacets().contains(FACET_OLD_DEFAULT)) {
       Collection<String> tags = query.getTags();
-      checkArgument(query.getOrganization() != null, "Cannot use tags facet, if no organization is specified.", query.getTags());
-
-      Function<TermsAggregationBuilder, AggregationBuilder> childFeature = termsAggregation -> {
-
-        FilterAggregationBuilder scopeAggregation = AggregationBuilders.filter(
-          "scope_filter_for_" + FACET_TAGS,
-          termsQuery(FIELD_RULE_EXTENSION_SCOPE,
-            RuleExtensionScope.system().getScope(),
-            RuleExtensionScope.organization(query.getOrganization()).getScope()))
-          .subAggregation(termsAggregation);
-
-        return JoinAggregationBuilders.children("children_for_" + termsAggregation.getName(), TYPE_RULE_EXTENSION.getName())
-          .subAggregation(scopeAggregation);
-      };
-
       aggregations.put(FACET_TAGS,
-        stickyFacetBuilder.buildStickyFacet(FIELD_RULE_EXTENSION_TAGS, FACET_TAGS, MAX_FACET_SIZE, childFeature,
+        stickyFacetBuilder.buildStickyFacet(FIELD_RULE_TAGS, FACET_TAGS, MAX_FACET_SIZE,
           (tags == null) ? (new String[0]) : tags.toArray()));
     }
     if (options.getFacets().contains(FACET_TYPES)) {
@@ -484,30 +477,43 @@ public class RuleIndex {
     addDefaultSecurityFacets(query, options, aggregations, stickyFacetBuilder);
   }
 
+  private static Function<TermsAggregationBuilder, AggregationBuilder> filterSecurityCategories() {
+    return termsAggregation -> AggregationBuilders.filter(
+      "filter_by_rule_types_" + termsAggregation.getName(),
+      termsQuery(FIELD_RULE_TYPE,
+        VULNERABILITY.name(),
+        SECURITY_HOTSPOT.name()))
+      .subAggregation(termsAggregation);
+  }
+
   private static void addDefaultSecurityFacets(RuleQuery query, SearchOptions options, Map<String, AggregationBuilder> aggregations,
     StickyFacetBuilder stickyFacetBuilder) {
     if (options.getFacets().contains(FACET_CWE)) {
       Collection<String> categories = query.getCwe();
       aggregations.put(FACET_CWE,
         stickyFacetBuilder.buildStickyFacet(FIELD_RULE_CWE, FACET_CWE,
+          FACET_DEFAULT_SIZE, filterSecurityCategories(),
           (categories == null) ? (new String[0]) : categories.toArray()));
     }
     if (options.getFacets().contains(FACET_OWASP_TOP_10)) {
       Collection<String> categories = query.getOwaspTop10();
       aggregations.put(FACET_OWASP_TOP_10,
         stickyFacetBuilder.buildStickyFacet(FIELD_RULE_OWASP_TOP_10, FACET_OWASP_TOP_10,
+          FACET_DEFAULT_SIZE, filterSecurityCategories(),
           (categories == null) ? (new String[0]) : categories.toArray()));
     }
     if (options.getFacets().contains(FACET_SANS_TOP_25)) {
       Collection<String> categories = query.getSansTop25();
       aggregations.put(FACET_SANS_TOP_25,
         stickyFacetBuilder.buildStickyFacet(FIELD_RULE_SANS_TOP_25, FACET_SANS_TOP_25,
+          FACET_DEFAULT_SIZE, filterSecurityCategories(),
           (categories == null) ? (new String[0]) : categories.toArray()));
     }
     if (options.getFacets().contains(FACET_SONARSOURCE_SECURITY)) {
       Collection<String> categories = query.getSonarsourceSecurity();
       aggregations.put(FACET_SONARSOURCE_SECURITY,
         stickyFacetBuilder.buildStickyFacet(FIELD_RULE_SONARSOURCE_SECURITY, FACET_SONARSOURCE_SECURITY,
+          FACET_DEFAULT_SIZE, filterSecurityCategories(),
           (categories == null) ? (new String[0]) : categories.toArray()));
     }
   }
@@ -563,7 +569,7 @@ public class RuleIndex {
     return new StickyFacetBuilder(query, filters, null, BucketOrder.compound(BucketOrder.count(false), BucketOrder.key(true)));
   }
 
-  private static void setSorting(RuleQuery query, SearchRequestBuilder esSearch) {
+  private static void setSorting(RuleQuery query, SearchSourceBuilder esSearch) {
     /* integrate Query Sort */
     String queryText = query.getQueryText();
     if (query.getSortField() != null) {
@@ -573,13 +579,13 @@ public class RuleIndex {
       } else {
         sort.order(SortOrder.DESC);
       }
-      esSearch.addSort(sort);
+      esSearch.sort(sort);
     } else if (StringUtils.isNotEmpty(queryText)) {
-      esSearch.addSort(SortBuilders.scoreSort());
+      esSearch.sort(SortBuilders.scoreSort());
     } else {
-      esSearch.addSort(appendSortSuffixIfNeeded(FIELD_RULE_UPDATED_AT), SortOrder.DESC);
+      esSearch.sort(appendSortSuffixIfNeeded(FIELD_RULE_UPDATED_AT), SortOrder.DESC);
       // deterministic sort when exactly the same updated_at (same millisecond)
-      esSearch.addSort(appendSortSuffixIfNeeded(FIELD_RULE_KEY), SortOrder.ASC);
+      esSearch.sort(appendSortSuffixIfNeeded(FIELD_RULE_KEY), SortOrder.ASC);
     }
   }
 
@@ -590,29 +596,20 @@ public class RuleIndex {
         : "");
   }
 
-  private static void setPagination(SearchOptions options, SearchRequestBuilder esSearch) {
-    esSearch.setFrom(options.getOffset());
-    esSearch.setSize(options.getLimit());
+  private static void setPagination(SearchOptions options, SearchSourceBuilder esSearch) {
+    esSearch.from(options.getOffset());
+    esSearch.size(options.getLimit());
   }
 
-  public List<String> listTags(@Nullable OrganizationDto organization, @Nullable String query, int size) {
+  public List<String> listTags(@Nullable String query, int size) {
     int maxPageSize = 500;
     checkArgument(size <= maxPageSize, "Page size must be lower than or equals to " + maxPageSize);
     if (size <= 0) {
       return emptyList();
     }
 
-    ImmutableList.Builder<String> scopes = ImmutableList.<String>builder()
-      .add(RuleExtensionScope.system().getScope());
-    if (organization != null) {
-      scopes.add(RuleExtensionScope.organization(organization).getScope());
-    }
-    TermsQueryBuilder scopeFilter = QueryBuilders.termsQuery(
-      FIELD_RULE_EXTENSION_SCOPE,
-      scopes.build().toArray(new String[0]));
-
     TermsAggregationBuilder termsAggregation = AggregationBuilders.terms(AGGREGATION_NAME_FOR_TAGS)
-      .field(FIELD_RULE_EXTENSION_TAGS)
+      .field(FIELD_RULE_TAGS)
       .size(size)
       .order(BucketOrder.key(true))
       .minDocCount(1);
@@ -622,17 +619,17 @@ public class RuleIndex {
       .map(s -> new IncludeExclude(s, null))
       .ifPresent(termsAggregation::includeExclude);
 
-    SearchRequestBuilder request = client
-      .prepareSearch(TYPE_RULE_EXTENSION.getMainType())
-      .setQuery(boolQuery().filter(scopeFilter))
-      .setSize(0)
-      .addAggregation(termsAggregation);
+    SearchRequest request = EsClient.prepareSearch(TYPE_RULE.getMainType())
+      .source(new SearchSourceBuilder()
+        .query(matchAllQuery())
+        .size(0)
+        .aggregation(termsAggregation));
 
-    SearchResponse esResponse = request.get();
+    SearchResponse esResponse = client.search(request);
     return EsUtils.termsKeys(esResponse.getAggregations().get(AGGREGATION_NAME_FOR_TAGS));
   }
 
-  private static boolean isNotEmpty(@Nullable Collection list) {
+  private static boolean isNotEmpty(@Nullable Collection<?> list) {
     return list != null && !list.isEmpty();
   }
 }

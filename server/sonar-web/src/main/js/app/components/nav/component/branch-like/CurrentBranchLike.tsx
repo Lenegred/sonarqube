@@ -23,10 +23,10 @@ import HelpTooltip from 'sonar-ui-common/components/controls/HelpTooltip';
 import DropdownIcon from 'sonar-ui-common/components/icons/DropdownIcon';
 import PlusCircleIcon from 'sonar-ui-common/components/icons/PlusCircleIcon';
 import { translate } from 'sonar-ui-common/helpers/l10n';
-import DocTooltip from '../../../../../components/docs/DocTooltip';
+import DocumentationTooltip from '../../../../../components/common/DocumentationTooltip';
 import BranchLikeIcon from '../../../../../components/icons/BranchLikeIcon';
 import { getBranchLikeDisplayName } from '../../../../../helpers/branch-like';
-import { getPortfolioAdminUrl } from '../../../../../helpers/urls';
+import { getApplicationAdminUrl } from '../../../../../helpers/urls';
 import { BranchLike } from '../../../../../types/branch-like';
 import { ComponentQualifier } from '../../../../../types/component';
 import { colors } from '../../../../theme';
@@ -66,7 +66,7 @@ export function CurrentBranchLike(props: CurrentBranchLikeProps) {
               <>
                 <p>{translate('application.branches.help')}</p>
                 <hr className="spacer-top spacer-bottom" />
-                <Link to={getPortfolioAdminUrl(component.key, component.qualifier)}>
+                <Link to={getApplicationAdminUrl(component.key)}>
                   {translate('application.branches.link')}
                 </Link>
               </>
@@ -78,21 +78,39 @@ export function CurrentBranchLike(props: CurrentBranchLikeProps) {
     } else {
       if (!branchesEnabled) {
         return (
-          <DocTooltip
+          <DocumentationTooltip
+            content={translate('branch_like_navigation.no_branch_support.content')}
             data-test="branches-support-disabled"
-            doc={import(/* webpackMode: "eager" */ 'Docs/tooltips/branches/no-branch-support.md')}>
+            links={[
+              {
+                href: 'https://redirect.sonarsource.com/editions/developer.html',
+                label: translate('learn_more')
+              }
+            ]}
+            title={translate('branch_like_navigation.no_branch_support.title')}>
             {plusIcon}
-          </DocTooltip>
+          </DocumentationTooltip>
         );
       }
 
       if (!hasManyBranches) {
         return (
-          <DocTooltip
+          <DocumentationTooltip
+            content={translate('branch_like_navigation.only_one_branch.content')}
             data-test="only-one-branch-like"
-            doc={import(/* webpackMode: "eager" */ 'Docs/tooltips/branches/single-branch.md')}>
+            links={[
+              {
+                href: '/documentation/branches/overview/',
+                label: translate('branch_like_navigation.only_one_branch.documentation')
+              },
+              {
+                href: '/documentation/analysis/pull-request/',
+                label: translate('branch_like_navigation.only_one_branch.pr_analysis')
+              }
+            ]}
+            title={translate('branch_like_navigation.only_one_branch.title')}>
             {plusIcon}
-          </DocTooltip>
+          </DocumentationTooltip>
         );
       }
     }

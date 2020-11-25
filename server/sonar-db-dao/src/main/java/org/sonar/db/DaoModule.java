@@ -25,7 +25,6 @@ import java.util.List;
 import org.sonar.core.platform.Module;
 import org.sonar.db.alm.AlmAppInstallDao;
 import org.sonar.db.alm.OrganizationAlmBindingDao;
-import org.sonar.db.alm.ProjectAlmBindingDao;
 import org.sonar.db.alm.pat.AlmPatDao;
 import org.sonar.db.alm.setting.AlmSettingDao;
 import org.sonar.db.alm.setting.ProjectAlmSettingDao;
@@ -87,6 +86,7 @@ import org.sonar.db.user.RoleDao;
 import org.sonar.db.user.SamlMessageIdDao;
 import org.sonar.db.user.SessionTokensDao;
 import org.sonar.db.user.UserDao;
+import org.sonar.db.user.UserDismissedMessagesDao;
 import org.sonar.db.user.UserGroupDao;
 import org.sonar.db.user.UserPropertiesDao;
 import org.sonar.db.user.UserTokenDao;
@@ -124,7 +124,6 @@ public class DaoModule extends Module {
     AlmSettingDao.class,
     AlmPatDao.class,
     ProjectAlmSettingDao.class,
-    ProjectAlmBindingDao.class,
     InternalComponentPropertiesDao.class,
     InternalPropertiesDao.class,
     IssueChangeDao.class,
@@ -161,6 +160,7 @@ public class DaoModule extends Module {
     SchemaMigrationDao.class,
     SessionTokensDao.class,
     UserDao.class,
+    UserDismissedMessagesDao.class,
     UserGroupDao.class,
     UserPermissionDao.class,
     UserPropertiesDao.class,

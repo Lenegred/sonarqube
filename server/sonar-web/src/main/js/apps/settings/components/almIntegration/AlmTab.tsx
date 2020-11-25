@@ -18,25 +18,27 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 import * as React from 'react';
-import { AlmBindingDefinition, AlmKeys } from '../../../../types/alm-settings';
+import {
+  AlmBindingDefinition,
+  AlmKeys,
+  AlmSettingsBindingStatus
+} from '../../../../types/alm-settings';
 import { AlmBindingDefinitionFormChildrenProps } from './AlmBindingDefinitionForm';
-import { AlmIntegrationFeatureBoxProps } from './AlmIntegrationFeatureBox';
 import AlmTabRenderer from './AlmTabRenderer';
+import { VALIDATED_ALMS } from './utils';
 
 interface Props<B> {
   alm: AlmKeys;
-  additionalColumnsHeaders?: string[];
-  additionalColumnsKeys?: Array<keyof B>;
-  additionalTableInfo?: React.ReactNode;
   createConfiguration: (data: B) => Promise<void>;
   defaultBinding: B;
   definitions: B[];
-  features?: AlmIntegrationFeatureBoxProps[];
+  definitionStatus: T.Dict<AlmSettingsBindingStatus>;
   form: (props: AlmBindingDefinitionFormChildrenProps<B>) => React.ReactNode;
   help?: React.ReactNode;
   loadingAlmDefinitions: boolean;
   loadingProjectCount: boolean;
   multipleAlmEnabled: boolean;
+  onCheck: (definitionKey: string) => void;
   onDelete: (definitionKey: string) => void;
   onUpdateDefinitions: () => void;
   optionalFields?: Array<keyof B>;
@@ -85,7 +87,7 @@ export default class AlmTab<B extends AlmBindingDefinition> extends React.PureCo
       ? this.props.updateConfiguration({ newKey: config.key, ...config, key: originalKey })
       : // If there's no support for multi-ALM binding, the key will be an empty string.
         // Set a default.
-        this.props.createConfiguration(config.key ? config : { ...config, key: this.props.alm });
+        this.props.createConfiguration({ ...config, key: config.key || this.props.alm });
 
     this.setState({ submitting: true });
     return call
@@ -95,6 +97,11 @@ export default class AlmTab<B extends AlmBindingDefinition> extends React.PureCo
         }
       })
       .then(this.props.onUpdateDefinitions)
+      .then(() => {
+        if (VALIDATED_ALMS.includes(this.props.alm)) {
+          this.props.onCheck(config.key);
+        }
+      })
       .catch(() => {
         if (this.mounted) {
           this.setState({ submitting: false, success: false });
@@ -104,13 +111,10 @@ export default class AlmTab<B extends AlmBindingDefinition> extends React.PureCo
 
   render() {
     const {
-      additionalColumnsHeaders = [],
-      additionalColumnsKeys = [],
-      additionalTableInfo,
       alm,
       defaultBinding,
       definitions,
-      features,
+      definitionStatus,
       form,
       help,
       loadingAlmDefinitions,
@@ -122,20 +126,18 @@ export default class AlmTab<B extends AlmBindingDefinition> extends React.PureCo
 
     return (
       <AlmTabRenderer
-        additionalColumnsHeaders={additionalColumnsHeaders}
-        additionalColumnsKeys={additionalColumnsKeys}
-        additionalTableInfo={additionalTableInfo}
         alm={alm}
         defaultBinding={defaultBinding}
         definitions={definitions}
+        definitionStatus={definitionStatus}
         editedDefinition={editedDefinition}
-        features={features}
         form={form}
         help={help}
         loadingAlmDefinitions={loadingAlmDefinitions}
         loadingProjectCount={loadingProjectCount}
         multipleAlmEnabled={multipleAlmEnabled}
         onCancel={this.handleCancel}
+        onCheck={this.props.onCheck}
         onCreate={this.handleCreate}
         onDelete={this.props.onDelete}
         onEdit={this.handleEdit}

@@ -44,7 +44,8 @@ import org.sonar.server.ws.WsActionTester;
 
 import static java.util.Optional.ofNullable;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.sonar.db.permission.OrganizationPermission.ADMINISTER_QUALITY_PROFILES;
+import static org.sonar.db.permission.GlobalPermission.ADMINISTER_QUALITY_PROFILES;
+import static org.sonar.db.permission.GlobalPermission.SCAN;
 
 public class RenameActionTest {
 
@@ -70,7 +71,7 @@ public class RenameActionTest {
     RenameAction underTest = new RenameAction(dbClient, userSession, wsSupport);
     ws = new WsActionTester(underTest);
 
-    organization = db.organizations().insert();
+    organization = db.organizations().getDefaultOrganization();
     createProfiles();
   }
 
@@ -90,14 +91,12 @@ public class RenameActionTest {
     logInAsQProfileAdministrator();
 
     QProfileDto qualityProfile1 = QualityProfileTesting.newQualityProfileDto()
-      .setOrganizationUuid(organization.getUuid())
       .setLanguage("xoo")
       .setName("Old, valid name");
     db.qualityProfiles().insert(qualityProfile1);
     String qualityProfileKey1 = qualityProfile1.getKee();
 
     QProfileDto qualityProfile2 = QualityProfileTesting.newQualityProfileDto()
-      .setOrganizationUuid(organization.getUuid())
       .setLanguage("xoo")
       .setName("Invalid, duplicated name");
     db.qualityProfiles().insert(qualityProfile2);
@@ -110,35 +109,8 @@ public class RenameActionTest {
   }
 
   @Test
-  public void allow_same_name_in_different_organizations() {
-    OrganizationDto organizationX = db.organizations().insert();
-    OrganizationDto organizationY = db.organizations().insert();
-    userSession.logIn()
-      .addPermission(ADMINISTER_QUALITY_PROFILES, organizationX);
-
-    QProfileDto qualityProfile1 = QualityProfileTesting.newQualityProfileDto()
-      .setOrganizationUuid(organizationX.getUuid())
-      .setLanguage("xoo")
-      .setName("Old, unique name");
-    db.qualityProfiles().insert(qualityProfile1);
-    String qualityProfileKey1 = qualityProfile1.getKee();
-
-    QProfileDto qualityProfile2 = QualityProfileTesting.newQualityProfileDto()
-      .setOrganizationUuid(organizationY.getUuid())
-      .setLanguage("xoo")
-      .setName("Duplicated name");
-    db.qualityProfiles().insert(qualityProfile2);
-    String qualityProfileKey2 = qualityProfile2.getKee();
-
-    call(qualityProfileKey1, "Duplicated name");
-
-    QProfileDto reloaded = db.getDbClient().qualityProfileDao().selectByUuid(db.getSession(), qualityProfileKey1);
-    assertThat(reloaded.getName()).isEqualTo("Duplicated name");
-  }
-
-  @Test
   public void as_qprofile_editor() {
-    QProfileDto qualityProfile = db.qualityProfiles().insert(organization);
+    QProfileDto qualityProfile = db.qualityProfiles().insert();
     UserDto user = db.users().insertUser();
     db.qualityProfiles().addUserPermission(qualityProfile, user);
     userSession.logIn(user);
@@ -171,13 +143,10 @@ public class RenameActionTest {
 
   @Test
   public void fail_if_not_profile_administrator() {
-    OrganizationDto organizationX = db.organizations().insert();
-    OrganizationDto organizationY = db.organizations().insert();
     userSession.logIn(db.users().insertUser())
-      .addPermission(ADMINISTER_QUALITY_PROFILES, organizationX);
+      .addPermission(SCAN);
 
-    QProfileDto qualityProfile = QualityProfileTesting.newQualityProfileDto()
-      .setOrganizationUuid(organizationY.getUuid());
+    QProfileDto qualityProfile = QualityProfileTesting.newQualityProfileDto();
     db.qualityProfiles().insert(qualityProfile);
     String qualityProfileKey = qualityProfile.getKee();
 
@@ -208,7 +177,7 @@ public class RenameActionTest {
   @Test
   public void fail_if_profile_is_built_in() {
     logInAsQProfileAdministrator();
-    String qualityProfileKey = db.qualityProfiles().insert(organization, p -> p.setIsBuiltIn(true)).getKee();
+    String qualityProfileKey = db.qualityProfiles().insert(p -> p.setIsBuiltIn(true)).getKee();
 
     expectedException.expect(BadRequestException.class);
 
@@ -247,22 +216,21 @@ public class RenameActionTest {
   }
 
   private String createNewValidQualityProfileKey() {
-    QProfileDto qualityProfile = QualityProfileTesting.newQualityProfileDto()
-      .setOrganizationUuid(organization.getUuid());
+    QProfileDto qualityProfile = QualityProfileTesting.newQualityProfileDto();
     db.qualityProfiles().insert(qualityProfile);
     return qualityProfile.getKee();
   }
 
   private void createProfiles() {
-    db.qualityProfiles().insert(organization, p -> p.setKee("sonar-way-xoo1-12345").setLanguage(xoo1Key).setName("Sonar way"));
+    db.qualityProfiles().insert(p -> p.setKee("sonar-way-xoo1-12345").setLanguage(xoo1Key).setName("Sonar way"));
 
-    QProfileDto parentXoo2 = db.qualityProfiles().insert(organization, p -> p.setKee("sonar-way-xoo2-23456").setLanguage(xoo2Key).setName("Sonar way"));
+    QProfileDto parentXoo2 = db.qualityProfiles().insert(p -> p.setKee("sonar-way-xoo2-23456").setLanguage(xoo2Key).setName("Sonar way"));
 
-    db.qualityProfiles().insert(organization, p -> p.setKee("my-sonar-way-xoo2-34567").setLanguage(xoo2Key).setName("My Sonar way").setParentKee(parentXoo2.getKee()));
+    db.qualityProfiles().insert(p -> p.setKee("my-sonar-way-xoo2-34567").setLanguage(xoo2Key).setName("My Sonar way").setParentKee(parentXoo2.getKee()));
   }
 
   private void logInAsQProfileAdministrator() {
-    userSession.logIn(db.users().insertUser()).addPermission(ADMINISTER_QUALITY_PROFILES, organization);
+    userSession.logIn(db.users().insertUser()).addPermission(ADMINISTER_QUALITY_PROFILES);
   }
 
   private void call(@Nullable String key, @Nullable String name) {

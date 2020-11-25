@@ -19,13 +19,23 @@
  */
 export enum TutorialModes {
   Manual = 'manual',
-  Jenkins = 'jenkins'
+  Jenkins = 'jenkins',
+  GitLabCI = 'gitlab-ci'
 }
 
-export interface LanguageConfig {
-  language?: string;
-  javaBuild?: string;
-  cFamilyCompiler?: string;
-  os?: string;
-  projectKey?: string;
+export enum BuildTools {
+  Maven = 'maven',
+  Gradle = 'gradle',
+  DotNet = 'dotnet',
+  Other = 'other'
 }
+
+export enum OSs {
+  Linux = 'linux',
+  Windows = 'win',
+  MacOS = 'mac'
+}
+
+export type ManualTutorialConfig =
+  | { buildTool?: BuildTools.Maven | BuildTools.Gradle | BuildTools.DotNet }
+  | { buildTool: BuildTools.Other; os?: OSs };

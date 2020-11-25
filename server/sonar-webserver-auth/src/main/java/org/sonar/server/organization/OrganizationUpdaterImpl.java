@@ -33,8 +33,8 @@ import org.sonar.db.DbSession;
 import org.sonar.db.organization.DefaultTemplates;
 import org.sonar.db.organization.OrganizationDto;
 import org.sonar.db.organization.OrganizationMemberDto;
+import org.sonar.db.permission.GlobalPermission;
 import org.sonar.db.permission.GroupPermissionDto;
-import org.sonar.db.permission.OrganizationPermission;
 import org.sonar.db.permission.template.PermissionTemplateDto;
 import org.sonar.db.qualitygate.QualityGateDto;
 import org.sonar.db.qualityprofile.DefaultQProfileDto;
@@ -59,7 +59,7 @@ import static org.sonar.api.web.UserRole.SECURITYHOTSPOT_ADMIN;
 import static org.sonar.api.web.UserRole.USER;
 import static org.sonar.core.util.stream.MoreCollectors.uniqueIndex;
 import static org.sonar.db.organization.OrganizationDto.Subscription.FREE;
-import static org.sonar.db.permission.OrganizationPermission.SCAN;
+import static org.sonar.db.permission.GlobalPermission.SCAN;
 
 public class OrganizationUpdaterImpl implements OrganizationUpdater {
 
@@ -99,12 +99,12 @@ public class OrganizationUpdaterImpl implements OrganizationUpdater {
     insertOrganizationMember(dbSession, organization, userCreator.getUuid());
     dbClient.qualityGateDao().associate(dbSession, uuidFactory.create(), organization, builtInQualityGate);
     GroupDto ownerGroup = insertOwnersGroup(dbSession, organization);
-    GroupDto defaultGroup = defaultGroupCreator.create(dbSession, organization.getUuid());
+    GroupDto defaultGroup = defaultGroupCreator.create(dbSession);
     insertDefaultTemplateOnGroups(dbSession, organization, ownerGroup, defaultGroup);
     addCurrentUserToGroup(dbSession, ownerGroup, userCreator.getUuid());
     addCurrentUserToGroup(dbSession, defaultGroup, userCreator.getUuid());
     try (DbSession batchDbSession = dbClient.openSession(true)) {
-      insertQualityProfiles(dbSession, batchDbSession, organization);
+      insertQualityProfiles(dbSession, batchDbSession);
       batchDbSession.commit();
 
       // Elasticsearch is updated when DB session is committed
@@ -162,7 +162,6 @@ public class OrganizationUpdaterImpl implements OrganizationUpdater {
     PermissionTemplateDto permissionTemplateDto = dbClient.permissionTemplateDao().insert(
       dbSession,
       new PermissionTemplateDto()
-        .setOrganizationUuid(organizationDto.getUuid())
         .setUuid(uuidFactory.create())
         .setName(PERM_TEMPLATE_NAME)
         .setDescription(format(PERM_TEMPLATE_DESCRIPTION_PATTERN, organizationDto.getName()))
@@ -186,14 +185,13 @@ public class OrganizationUpdaterImpl implements OrganizationUpdater {
     dbClient.permissionTemplateDao().insertGroupPermission(dbSession, template.getUuid(), group == null ? null : group.getUuid(), permission);
   }
 
-  private void insertQualityProfiles(DbSession dbSession, DbSession batchDbSession, OrganizationDto organization) {
+  private void insertQualityProfiles(DbSession dbSession, DbSession batchDbSession) {
     Map<QProfileName, BuiltInQProfile> builtInsPerName = builtInQProfileRepository.get().stream()
       .collect(uniqueIndex(BuiltInQProfile::getQProfileName));
 
     List<DefaultQProfileDto> defaults = new ArrayList<>();
     dbClient.qualityProfileDao().selectBuiltInRuleProfiles(dbSession).forEach(rulesProfile -> {
       OrgQProfileDto dto = new OrgQProfileDto()
-        .setOrganizationUuid(organization.getUuid())
         .setRulesProfileUuid(rulesProfile.getUuid())
         .setUuid(uuidFactory.create());
 
@@ -205,7 +203,6 @@ public class OrganizationUpdaterImpl implements OrganizationUpdater {
         // in order to benefit from batch SQL inserts
         defaults.add(new DefaultQProfileDto()
           .setQProfileUuid(dto.getUuid())
-          .setOrganizationUuid(organization.getUuid())
           .setLanguage(rulesProfile.getLanguage()));
       }
 
@@ -221,19 +218,17 @@ public class OrganizationUpdaterImpl implements OrganizationUpdater {
   private GroupDto insertOwnersGroup(DbSession dbSession, OrganizationDto organization) {
     GroupDto group = dbClient.groupDao().insert(dbSession, new GroupDto()
       .setUuid(uuidFactory.create())
-      .setOrganizationUuid(organization.getUuid())
       .setName(OWNERS_GROUP_NAME)
       .setDescription(OWNERS_GROUP_DESCRIPTION));
-    permissionService.getAllOrganizationPermissions().forEach(p -> addPermissionToGroup(dbSession, group, p));
+    permissionService.getGlobalPermissions().forEach(p -> addPermissionToGroup(dbSession, group, p));
     return group;
   }
 
-  private void addPermissionToGroup(DbSession dbSession, GroupDto group, OrganizationPermission permission) {
+  private void addPermissionToGroup(DbSession dbSession, GroupDto group, GlobalPermission permission) {
     dbClient.groupPermissionDao().insert(
       dbSession,
       new GroupPermissionDto()
         .setUuid(uuidFactory.create())
-        .setOrganizationUuid(group.getOrganizationUuid())
         .setGroupUuid(group.getUuid())
         .setRole(permission.getKey()));
   }

@@ -68,6 +68,8 @@ public interface PurgeMapper {
 
   void deleteComponentsByProjectUuid(@Param("rootUuid") String rootUuid);
 
+  void deleteComponentsByMainBranchProjectUuid(@Param("uuid") String uuid);
+
   void deleteProjectsByProjectUuid(@Param("projectUuid") String projectUuid);
 
   void deleteComponentsByUuids(@Param("componentUuids") List<String> componentUuids);
@@ -139,8 +141,6 @@ public interface PurgeMapper {
 
   void deleteProjectMappingsByProjectUuid(@Param("projectUuid") String projectUuid);
 
-  void deleteProjectAlmBindingsByProjectUuid(@Param("projectUuid") String projectUuid);
-
   void deleteBranchByUuid(@Param("uuid") String uuid);
 
   void deleteLiveMeasuresByProjectUuid(@Param("projectUuid") String projectUuid);
@@ -149,4 +149,7 @@ public interface PurgeMapper {
 
   void deleteNewCodePeriodsByRootUuid(String rootUuid);
 
+  void deleteProjectAlmSettingsByProjectUuid(@Param("projectUuid") String projectUuid);
+
+  void deleteUserDismissedMessagesByProjectUuid(@Param("projectUuid") String projectUuid);
 }

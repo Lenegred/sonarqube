@@ -23,7 +23,6 @@ import java.util.IdentityHashMap;
 import java.util.Map;
 import org.sonar.db.alm.AlmAppInstallDao;
 import org.sonar.db.alm.OrganizationAlmBindingDao;
-import org.sonar.db.alm.ProjectAlmBindingDao;
 import org.sonar.db.alm.pat.AlmPatDao;
 import org.sonar.db.alm.setting.AlmSettingDao;
 import org.sonar.db.alm.setting.ProjectAlmSettingDao;
@@ -85,6 +84,7 @@ import org.sonar.db.user.RoleDao;
 import org.sonar.db.user.SamlMessageIdDao;
 import org.sonar.db.user.SessionTokensDao;
 import org.sonar.db.user.UserDao;
+import org.sonar.db.user.UserDismissedMessagesDao;
 import org.sonar.db.user.UserGroupDao;
 import org.sonar.db.user.UserPropertiesDao;
 import org.sonar.db.user.UserTokenDao;
@@ -108,7 +108,6 @@ public class DbClient {
   private final AlmSettingDao almSettingDao;
   private final AlmPatDao almPatDao;
   private final ProjectAlmSettingDao projectAlmSettingDao;
-  private final ProjectAlmBindingDao projectAlmBindingDao;
   private final InternalComponentPropertiesDao internalComponentPropertiesDao;
   private final InternalPropertiesDao internalPropertiesDao;
   private final SnapshotDao snapshotDao;
@@ -166,6 +165,7 @@ public class DbClient {
   private final ProjectDao projectDao;
   private final SessionTokensDao sessionTokensDao;
   private final SamlMessageIdDao samlMessageIdDao;
+  private final UserDismissedMessagesDao userDismissedMessagesDao;
 
   public DbClient(Database database, MyBatis myBatis, DBSessions dbSessions, Dao... daos) {
     this.database = database;
@@ -180,7 +180,6 @@ public class DbClient {
     almSettingDao = getDao(map, AlmSettingDao.class);
     almPatDao = getDao(map, AlmPatDao.class);
     projectAlmSettingDao = getDao(map, ProjectAlmSettingDao.class);
-    projectAlmBindingDao = getDao(map, ProjectAlmBindingDao.class);
     schemaMigrationDao = getDao(map, SchemaMigrationDao.class);
     authorizationDao = getDao(map, AuthorizationDao.class);
     organizationDao = getDao(map, OrganizationDao.class);
@@ -245,6 +244,7 @@ public class DbClient {
     projectDao = getDao(map, ProjectDao.class);
     sessionTokensDao = getDao(map, SessionTokensDao.class);
     samlMessageIdDao = getDao(map, SamlMessageIdDao.class);
+    userDismissedMessagesDao = getDao(map, UserDismissedMessagesDao.class);
   }
 
   public DbSession openSession(boolean batch) {
@@ -269,10 +269,6 @@ public class DbClient {
 
   public ProjectAlmSettingDao projectAlmSettingDao() {
     return projectAlmSettingDao;
-  }
-
-  public ProjectAlmBindingDao projectAlmBindingsDao() {
-    return projectAlmBindingDao;
   }
 
   public SchemaMigrationDao schemaMigrationDao() {
@@ -539,6 +535,10 @@ public class DbClient {
 
   public SamlMessageIdDao samlMessageIdDao() {
     return samlMessageIdDao;
+  }
+
+  public UserDismissedMessagesDao userDismissedMessagesDao() {
+    return userDismissedMessagesDao;
   }
 
 }

@@ -39,7 +39,7 @@ import static org.apache.commons.lang.StringUtils.abbreviate;
 import static org.sonar.api.resources.Qualifiers.PROJECT;
 import static org.sonar.core.component.ComponentKeys.MAX_COMPONENT_KEY_LENGTH;
 import static org.sonar.db.component.ComponentValidator.MAX_COMPONENT_NAME_LENGTH;
-import static org.sonar.db.permission.OrganizationPermission.PROVISION_PROJECTS;
+import static org.sonar.db.permission.GlobalPermission.PROVISION_PROJECTS;
 import static org.sonar.server.component.NewComponent.newComponentBuilder;
 import static org.sonar.server.project.ws.ProjectsWsSupport.PARAM_ORGANIZATION;
 import static org.sonar.server.ws.KeyExamples.KEY_PROJECT_EXAMPLE_001;
@@ -106,18 +106,18 @@ public class CreateAction implements ProjectsWsAction {
   private CreateWsResponse doHandle(CreateRequest request) {
     try (DbSession dbSession = dbClient.openSession(false)) {
       OrganizationDto organization = support.getOrganization(dbSession, request.getOrganization());
-      userSession.checkPermission(PROVISION_PROJECTS, organization);
+      userSession.checkPermission(PROVISION_PROJECTS);
       String visibility = request.getVisibility();
       boolean changeToPrivate = visibility == null ? dbClient.organizationDao().getNewProjectPrivate(dbSession, organization) : "private".equals(visibility);
       support.checkCanUpdateProjectsVisibility(organization, changeToPrivate);
 
       ComponentDto componentDto = componentUpdater.create(dbSession, newComponentBuilder()
-        .setOrganizationUuid(organization.getUuid())
-        .setKey(request.getProjectKey())
-        .setName(request.getName())
-        .setPrivate(changeToPrivate)
-        .setQualifier(PROJECT)
-        .build(),
+          .setOrganizationUuid(organization.getUuid())
+          .setKey(request.getProjectKey())
+          .setName(request.getName())
+          .setPrivate(changeToPrivate)
+          .setQualifier(PROJECT)
+          .build(),
         userSession.isLoggedIn() ? userSession.getUuid() : null);
       return toCreateResponse(componentDto);
     }

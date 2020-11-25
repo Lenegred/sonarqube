@@ -30,7 +30,7 @@ dependencies {
     // please keep list ordered
     compile 'org.slf4j:slf4j-api'
 
-    compile 'org.elasticsearch.client:transport'
+    compile 'org.elasticsearch.client:elasticsearch-rest-high-level-client'
     compile project(':server:sonar-ce')
     compile project(':server:sonar-main')
     compile project(':server:sonar-process')
@@ -51,7 +51,7 @@ dependencies {
     jdbc_postgresql 'org.postgresql:postgresql'
 }
 
-// declare dependencies in configuration bundledPlugin to be packaged in extensions/plugins
+// declare dependencies in configuration bundledPlugin to be packaged in lib/extensions
 apply from: 'bundled_plugins.gradle'
 
 jar {
@@ -73,44 +73,31 @@ task zip(type: Zip, dependsOn: [configurations.compile]) {
       exclude 'elasticsearch-patch'
       // elasticsearch script will be replaced by patched version below
       exclude 'elasticsearch/bin/elasticsearch'
-      exclude 'elasticsearch/bin/elasticsearch.bat'
-      exclude 'elasticsearch/bin/elasticsearch-env.bat'
-      exclude 'elasticsearch/bin/elasticsearch-service.bat'
-      exclude 'elasticsearch/bin/elasticsearch-service-*.exe'
-      exclude 'elasticsearch/bin/elasticsearch-certgen*'
-      exclude 'elasticsearch/bin/elasticsearch-certutil*'
-      exclude 'elasticsearch/bin/elasticsearch-cli*'
-      exclude 'elasticsearch/bin/elasticsearch-croneval*'
-      exclude 'elasticsearch/bin/elasticsearch-keystore*'
-      exclude 'elasticsearch/bin/elasticsearch-migrate*'
-      exclude 'elasticsearch/bin/elasticsearch-plugin*'
-      exclude 'elasticsearch/bin/elasticsearch-saml-metadata*'
-      exclude 'elasticsearch/bin/elasticsearch-setup-passwords*'
-      exclude 'elasticsearch/bin/elasticsearch-shard*'
-      exclude 'elasticsearch/bin/elasticsearch-sql-cli*'
-      exclude 'elasticsearch/bin/elasticsearch-syskeygen*'
-      exclude 'elasticsearch/bin/elasticsearch-translog*'
-      exclude 'elasticsearch/bin/elasticsearch-users*'
-      exclude 'elasticsearch/bin/x-pack/**'
-      exclude 'elasticsearch/bin/x-pack*'
+      exclude 'elasticsearch/bin/elasticsearch-cli'
+      exclude 'elasticsearch/bin/elasticsearch-keystore'
+      exclude 'elasticsearch/bin/elasticsearch-node'
+      exclude 'elasticsearch/bin/elasticsearch-shard'
       exclude 'elasticsearch/lib/tools/**'
       exclude 'elasticsearch/modules/aggs-matrix-stats/**'
+      exclude 'elasticsearch/modules/geo/**'
       exclude 'elasticsearch/modules/ingest-common/**'
       exclude 'elasticsearch/modules/ingest-geoip/**'
       exclude 'elasticsearch/modules/ingest-user-agent/**'
+      exclude 'elasticsearch/modules/kibana/**'
       exclude 'elasticsearch/modules/lang-expression/**'
-      exclude 'elasticsearch/modules/lang-groovy/**'
       exclude 'elasticsearch/modules/lang-mustache/**'
+      exclude 'elasticsearch/modules/mapper-extras/**'
       exclude 'elasticsearch/modules/rank-eval/**'
-      exclude 'elasticsearch/modules/tribe/**'
-      exclude 'elasticsearch/modules/x-pack-*/**'
+      exclude 'elasticsearch/modules/reindex/**'
+      exclude 'elasticsearch/modules/repository-url/**'
+      exclude 'elasticsearch/modules/tasks/**'
   }
 
   into("${archiveDir}/conf/") {
     from file('src/main/assembly/conf/sonar.properties')
       filter(ReplaceTokens, tokens: [
               'searchDefaultHeapSize': '512MB',
-              'searchJavaOpts'       : '-Xmx512m -Xms512m -XX:+HeapDumpOnOutOfMemoryError',
+              'searchJavaOpts'       : '-Xmx512m -Xms512m -XX:MaxDirectMemorySize=256m -XX:+HeapDumpOnOutOfMemoryError',
               'ceDefaultHeapSize'    : '512MB',
               'ceJavaOpts'           : '-Xmx512m -Xms128m -XX:+HeapDumpOnOutOfMemoryError',
               'webDefaultHeapSize'   : '512MB',
@@ -130,7 +117,7 @@ task zip(type: Zip, dependsOn: [configurations.compile]) {
   into("${archiveDir}/lib/") {
     from jar
   }
-  into("${archiveDir}/extensions/plugins/") {
+  into("${archiveDir}/lib/extensions/") {
     from configurations.bundledPlugin
   }
   into("${archiveDir}/lib/jsw/") {
@@ -177,8 +164,8 @@ zip.doFirst {
 }
 // Check the size of the archive
 zip.doLast {
-  def minLength = 220000000
-  def maxLength = 235000000
+  def minLength = 236000000
+  def maxLength = 251000000
 
   def length = archiveFile.get().asFile.length()
   if (length < minLength)

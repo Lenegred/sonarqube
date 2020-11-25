@@ -21,14 +21,13 @@ import * as React from 'react';
 import { Link } from 'react-router';
 import { ButtonLink } from 'sonar-ui-common/components/controls/buttons';
 import Dropdown from 'sonar-ui-common/components/controls/Dropdown';
+import HelpTooltip from 'sonar-ui-common/components/controls/HelpTooltip';
 import Tooltip from 'sonar-ui-common/components/controls/Tooltip';
 import IssueTypeIcon from 'sonar-ui-common/components/icons/IssueTypeIcon';
 import LinkIcon from 'sonar-ui-common/components/icons/LinkIcon';
-import RuleScopeIcon from 'sonar-ui-common/components/icons/RuleScopeIcon';
 import DateFormatter from 'sonar-ui-common/components/intl/DateFormatter';
 import { PopupPlacement } from 'sonar-ui-common/components/ui/popups';
 import { translate, translateWithParameters } from 'sonar-ui-common/helpers/l10n';
-import DocTooltip from '../../../components/docs/DocTooltip';
 import SeverityHelper from '../../../components/shared/SeverityHelper';
 import TagsList from '../../../components/tags/TagsList';
 import { getRuleUrl } from '../../../helpers/urls';
@@ -41,7 +40,6 @@ interface Props {
   hideSimilarRulesFilter?: boolean;
   onFilterChange: (changes: Partial<Query>) => void;
   onTagsChange: (tags: string[]) => void;
-  organization: string | undefined;
   referencedRepositories: T.Dict<{ key: string; language: string; name: string }>;
   ruleDetails: T.RuleDetails;
 }
@@ -99,7 +97,6 @@ export default class RuleDetailsMeta extends React.PureComponent<Props> {
             closeOnClickOutside={true}
             overlay={
               <RuleDetailsTagsPopup
-                organization={this.props.organization}
                 setTags={this.props.onTagsChange}
                 sysTags={sysTags}
                 tags={tags}
@@ -166,13 +163,13 @@ export default class RuleDetailsMeta extends React.PureComponent<Props> {
       <li className="coding-rules-detail-property">
         {translate('coding_rules.custom_rule')}
         {' ('}
-        <Link to={getRuleUrl(ruleDetails.templateKey, this.props.organization)}>
+        <Link to={getRuleUrl(ruleDetails.templateKey)}>
           {translate('coding_rules.show_template')}
         </Link>
         {')'}
-        <DocTooltip
+        <HelpTooltip
           className="little-spacer-left"
-          doc={import(/* webpackMode: "eager" */ 'Docs/tooltips/rules/custom-rules.md')}
+          overlay={translate('coding_rules.custom_rule.help')}
         />
       </li>
     );
@@ -192,18 +189,6 @@ export default class RuleDetailsMeta extends React.PureComponent<Props> {
           {ruleDetails.debtRemFnCoeff !== undefined && ` +${ruleDetails.debtRemFnCoeff}`}
           {ruleDetails.effortToFixDescription !== undefined &&
             ` ${ruleDetails.effortToFixDescription}`}
-        </li>
-      </Tooltip>
-    );
-  };
-
-  renderScope = () => {
-    const scope = this.props.ruleDetails.scope || 'MAIN';
-    return (
-      <Tooltip overlay={translate('coding_rules.scope.title')}>
-        <li className="coding-rules-detail-property">
-          <RuleScopeIcon className="little-spacer-right" />
-          {translate('coding_rules.scope', scope)}
         </li>
       </Tooltip>
     );
@@ -248,7 +233,7 @@ export default class RuleDetailsMeta extends React.PureComponent<Props> {
               <Link
                 className="coding-rules-detail-permalink link-no-underline spacer-left text-middle"
                 title={translate('permalink')}
-                to={getRuleUrl(ruleDetails.key, this.props.organization)}>
+                to={getRuleUrl(ruleDetails.key)}>
                 <LinkIcon />
               </Link>
             )}
@@ -265,12 +250,7 @@ export default class RuleDetailsMeta extends React.PureComponent<Props> {
           <ul className="coding-rules-detail-properties">
             {this.renderType()}
             {this.renderSeverity()}
-            {!ruleDetails.isExternal && (
-              <>
-                {this.renderStatus()}
-                {this.renderScope()}
-              </>
-            )}
+            {!ruleDetails.isExternal && this.renderStatus()}
             {this.renderTags()}
             {!ruleDetails.isExternal && this.renderCreationDate()}
             {this.renderRepository()}

@@ -26,21 +26,17 @@ import org.sonar.api.server.ws.Response;
 import org.sonar.api.server.ws.WebService;
 import org.sonar.db.DbClient;
 import org.sonar.db.DbSession;
-import org.sonar.db.organization.DefaultTemplates;
 import org.sonar.db.permission.template.PermissionTemplateDto;
 import org.sonar.server.permission.DefaultTemplatesResolver;
 import org.sonar.server.permission.DefaultTemplatesResolver.ResolvedDefaultTemplates;
-import org.sonar.server.permission.DefaultTemplatesResolverImpl;
 import org.sonar.server.permission.ws.PermissionWsSupport;
 import org.sonar.server.permission.ws.PermissionsWsAction;
 import org.sonar.server.permission.ws.WsParameters;
 import org.sonar.server.user.UserSession;
 
 import static org.sonar.server.exceptions.BadRequestException.checkRequest;
-import static org.sonar.server.exceptions.NotFoundException.checkFoundWithOptional;
 import static org.sonar.server.permission.PermissionPrivilegeChecker.checkGlobalAdmin;
 import static org.sonar.server.permission.ws.template.WsTemplateRef.newTemplateRef;
-import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_ORGANIZATION;
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_TEMPLATE_ID;
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_TEMPLATE_NAME;
 
@@ -50,7 +46,8 @@ public class DeleteTemplateAction implements PermissionsWsAction {
   private final PermissionWsSupport wsSupport;
   private final DefaultTemplatesResolver defaultTemplatesResolver;
 
-  public DeleteTemplateAction(DbClient dbClient, UserSession userSession, PermissionWsSupport support, DefaultTemplatesResolver defaultTemplatesResolver) {
+  public DeleteTemplateAction(DbClient dbClient, UserSession userSession, PermissionWsSupport support,
+    DefaultTemplatesResolver defaultTemplatesResolver) {
     this.dbClient = dbClient;
     this.userSession = userSession;
     this.wsSupport = support;
@@ -60,7 +57,6 @@ public class DeleteTemplateAction implements PermissionsWsAction {
   private static DeleteTemplateRequest toDeleteTemplateWsRequest(Request request) {
     return new DeleteTemplateRequest()
       .setTemplateId(request.param(PARAM_TEMPLATE_ID))
-      .setOrganization(request.param(PARAM_ORGANIZATION))
       .setTemplateName(request.param(PARAM_TEMPLATE_NAME));
   }
 
@@ -85,56 +81,31 @@ public class DeleteTemplateAction implements PermissionsWsAction {
 
   private void doHandle(DeleteTemplateRequest request) {
     try (DbSession dbSession = dbClient.openSession(false)) {
-      PermissionTemplateDto template = wsSupport.findTemplate(dbSession, newTemplateRef(
-        request.getTemplateId(), request.getOrganization(), request.getTemplateName()));
-      checkGlobalAdmin(userSession, template.getOrganizationUuid());
+      PermissionTemplateDto template = wsSupport.findTemplate(dbSession, newTemplateRef(request.getTemplateId(), request.getTemplateName()));
+      checkGlobalAdmin(userSession);
 
-      DefaultTemplates defaultTemplates = retrieveDefaultTemplates(dbSession, template);
-
-      checkTemplateUuidIsNotDefault(template, defaultTemplates);
+      checkTemplateUuidIsNotDefault(dbSession, template);
       dbClient.permissionTemplateDao().deleteByUuid(dbSession, template.getUuid());
-      updateViewDefaultTemplateWhenGovernanceIsNotInstalled(dbSession, template, defaultTemplates);
-
       dbSession.commit();
     }
   }
 
-  /**
-   * The default template for view can be removed when Governance is not installed. To avoid keeping a reference
-   * to a non existing template, we update the default templates.
-   */
-  private void updateViewDefaultTemplateWhenGovernanceIsNotInstalled(DbSession dbSession, PermissionTemplateDto template, DefaultTemplates defaultTemplates) {
-    String viewDefaultTemplateUuid = defaultTemplates.getApplicationsUuid();
-    if (viewDefaultTemplateUuid != null && viewDefaultTemplateUuid.equals(template.getUuid())) {
-      defaultTemplates.setApplicationsUuid(null);
-      dbClient.organizationDao().setDefaultTemplates(dbSession, template.getOrganizationUuid(), defaultTemplates);
-    }
-  }
-
-  private DefaultTemplates retrieveDefaultTemplates(DbSession dbSession, PermissionTemplateDto template) {
-    return checkFoundWithOptional(
-      dbClient.organizationDao().getDefaultTemplates(dbSession, template.getOrganizationUuid()),
-      "Can't find default templates of Organization with uuid '%s' to which template with uuid '%s' belongs",
-      template.getOrganizationUuid(), template.getUuid());
-  }
-
-  private void checkTemplateUuidIsNotDefault(PermissionTemplateDto template, DefaultTemplates defaultTemplates) {
-    ResolvedDefaultTemplates resolvedDefaultTemplates = defaultTemplatesResolver.resolve(defaultTemplates);
+  private void checkTemplateUuidIsNotDefault(DbSession dbSession, PermissionTemplateDto template) {
+    ResolvedDefaultTemplates resolvedDefaultTemplates = defaultTemplatesResolver.resolve(dbSession);
     checkRequest(!resolvedDefaultTemplates.getProject().equals(template.getUuid()),
       "It is not possible to delete the default permission template for projects");
     resolvedDefaultTemplates.getApplication()
-      .ifPresent(viewDefaultTemplateUuid -> checkRequest(
-        !viewDefaultTemplateUuid.equals(template.getUuid()),
+      .ifPresent(defaultApplicationTemplate -> checkRequest(
+        !defaultApplicationTemplate.equals(template.getUuid()),
         "It is not possible to delete the default permission template for applications"));
     resolvedDefaultTemplates.getPortfolio()
-      .ifPresent(viewDefaultTemplateUuid -> checkRequest(
-        !viewDefaultTemplateUuid.equals(template.getUuid()),
+      .ifPresent(defaultPortfolioTemplate -> checkRequest(
+        !defaultPortfolioTemplate.equals(template.getUuid()),
         "It is not possible to delete the default permission template for portfolios"));
   }
 
   private static class DeleteTemplateRequest {
     private String templateId;
-    private String organization;
     private String templateName;
 
     @CheckForNull
@@ -144,16 +115,6 @@ public class DeleteTemplateAction implements PermissionsWsAction {
 
     public DeleteTemplateRequest setTemplateId(@Nullable String templateId) {
       this.templateId = templateId;
-      return this;
-    }
-
-    @CheckForNull
-    public String getOrganization() {
-      return organization;
-    }
-
-    public DeleteTemplateRequest setOrganization(@Nullable String s) {
-      this.organization = s;
       return this;
     }
 

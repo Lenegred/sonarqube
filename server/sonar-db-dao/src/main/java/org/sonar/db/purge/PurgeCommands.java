@@ -266,6 +266,13 @@ class PurgeCommands {
     profiler.stop();
   }
 
+  void deleteComponentsByMainBranchProjectUuid(String uuid) {
+    profiler.start("deleteComponentsByMainBranchProjectUuid (projects)");
+    purgeMapper.deleteComponentsByMainBranchProjectUuid(uuid);
+    session.commit();
+    profiler.stop();
+  }
+
   void deleteProject(String projectUuid) {
     profiler.start("deleteProject (projects)");
     purgeMapper.deleteProjectsByProjectUuid(projectUuid);
@@ -399,9 +406,9 @@ class PurgeCommands {
     profiler.stop();
   }
 
-  void deleteProjectAlmBindings(String rootUuid) {
-    profiler.start("deleteProjectAlmBindings (project_alm_bindings)");
-    purgeMapper.deleteProjectAlmBindingsByProjectUuid(rootUuid);
+  public void deleteProjectAlmSettings(String rootUuid) {
+    profiler.start("deleteProjectAlmSettings (project_alm_settings)");
+    purgeMapper.deleteProjectAlmSettingsByProjectUuid(rootUuid);
     session.commit();
     profiler.stop();
   }
@@ -426,4 +433,12 @@ class PurgeCommands {
     session.commit();
     profiler.stop();
   }
+
+  void deleteUserDismissedMessages(String projectUuid) {
+    profiler.start("deleteUserDismissedMessages (user_dismissed_messages)");
+    purgeMapper.deleteUserDismissedMessagesByProjectUuid(projectUuid);
+    session.commit();
+    profiler.stop();
+  }
+
 }

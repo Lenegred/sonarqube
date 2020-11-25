@@ -21,6 +21,8 @@ package org.sonar.server.user.ws;
 
 import java.util.Optional;
 import javax.annotation.Nullable;
+import org.elasticsearch.action.search.SearchRequest;
+import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -30,23 +32,25 @@ import org.sonar.db.DbClient;
 import org.sonar.db.DbSession;
 import org.sonar.db.DbTester;
 import org.sonar.db.alm.setting.AlmSettingDto;
+import org.sonar.db.ce.CeTaskMessageType;
 import org.sonar.db.component.ComponentDto;
 import org.sonar.db.organization.OrganizationDto;
 import org.sonar.db.permission.template.PermissionTemplateDto;
 import org.sonar.db.permission.template.PermissionTemplateUserDto;
+import org.sonar.db.project.ProjectDto;
 import org.sonar.db.property.PropertyDto;
 import org.sonar.db.property.PropertyQuery;
 import org.sonar.db.qualityprofile.QProfileDto;
 import org.sonar.db.user.GroupDto;
 import org.sonar.db.user.SessionTokenDto;
+import org.sonar.db.user.UserDismissedMessageDto;
 import org.sonar.db.user.UserDto;
+import org.sonar.server.es.EsClient;
 import org.sonar.server.es.EsTester;
 import org.sonar.server.exceptions.BadRequestException;
 import org.sonar.server.exceptions.ForbiddenException;
 import org.sonar.server.exceptions.NotFoundException;
 import org.sonar.server.exceptions.UnauthorizedException;
-import org.sonar.server.organization.DefaultOrganizationProvider;
-import org.sonar.server.organization.TestDefaultOrganizationProvider;
 import org.sonar.server.tester.UserSessionRule;
 import org.sonar.server.user.index.UserIndexDefinition;
 import org.sonar.server.user.index.UserIndexer;
@@ -60,10 +64,9 @@ import static org.elasticsearch.index.query.QueryBuilders.boolQuery;
 import static org.elasticsearch.index.query.QueryBuilders.termQuery;
 import static org.sonar.api.web.UserRole.CODEVIEWER;
 import static org.sonar.api.web.UserRole.USER;
-import static org.sonar.db.organization.OrganizationTesting.newOrganizationDto;
-import static org.sonar.db.permission.OrganizationPermission.ADMINISTER;
-import static org.sonar.db.permission.OrganizationPermission.ADMINISTER_QUALITY_PROFILES;
-import static org.sonar.db.permission.OrganizationPermission.SCAN;
+import static org.sonar.db.permission.GlobalPermission.ADMINISTER;
+import static org.sonar.db.permission.GlobalPermission.ADMINISTER_QUALITY_PROFILES;
+import static org.sonar.db.permission.GlobalPermission.SCAN;
 import static org.sonar.db.property.PropertyTesting.newUserPropertyDto;
 import static org.sonar.server.user.index.UserIndexDefinition.FIELD_ACTIVE;
 import static org.sonar.server.user.index.UserIndexDefinition.FIELD_UUID;
@@ -71,29 +74,25 @@ import static org.sonar.test.JsonAssert.assertJson;
 
 public class DeactivateActionTest {
 
-  private System2 system2 = new AlwaysIncreasingSystem2();
+  private final System2 system2 = new AlwaysIncreasingSystem2();
 
   @Rule
   public ExpectedException expectedException = ExpectedException.none();
-
   @Rule
   public DbTester db = DbTester.create(system2);
-
   @Rule
   public EsTester es = EsTester.create();
-
   @Rule
   public UserSessionRule userSession = UserSessionRule.standalone();
 
-  private DefaultOrganizationProvider defaultOrganizationProvider = TestDefaultOrganizationProvider.from(db);
-  private DbClient dbClient = db.getDbClient();
-  private UserIndexer userIndexer = new UserIndexer(dbClient, es.client());
-  private DbSession dbSession = db.getSession();
-  private WsActionTester ws = new WsActionTester(new DeactivateAction(dbClient, userIndexer, userSession,
-    new UserJsonWriter(userSession), defaultOrganizationProvider));
+  private final DbClient dbClient = db.getDbClient();
+  private final UserIndexer userIndexer = new UserIndexer(dbClient, es.client());
+  private final DbSession dbSession = db.getSession();
+  private final WsActionTester ws = new WsActionTester(new DeactivateAction(dbClient, userIndexer, userSession, new UserJsonWriter(userSession)));
 
   @Test
   public void deactivate_user_and_delete_his_related_data() {
+    createAdminUser();
     UserDto user = db.users().insertUser(u -> u
       .setLogin("ada.lovelace")
       .setEmail("ada.lovelace@noteg.com")
@@ -104,15 +103,17 @@ public class DeactivateActionTest {
     deactivate(user.getLogin());
 
     verifyThatUserIsDeactivated(user.getLogin());
-    assertThat(es.client().prepareSearch(UserIndexDefinition.TYPE_USER)
-      .setQuery(boolQuery()
-        .must(termQuery(FIELD_UUID, user.getUuid()))
-        .must(termQuery(FIELD_ACTIVE, "false")))
-      .get().getHits().getHits()).hasSize(1);
+    assertThat(es.client().search(EsClient.prepareSearch(UserIndexDefinition.TYPE_USER)
+      .source(new SearchSourceBuilder()
+        .query(boolQuery()
+          .must(termQuery(FIELD_UUID, user.getUuid()))
+          .must(termQuery(FIELD_ACTIVE, "false")))))
+      .getHits().getHits()).hasSize(1);
   }
 
   @Test
   public void deactivate_user_deletes_his_group_membership() {
+    createAdminUser();
     logInAsSystemAdministrator();
     UserDto user = db.users().insertUser();
     GroupDto group1 = db.users().insertGroup();
@@ -126,6 +127,7 @@ public class DeactivateActionTest {
 
   @Test
   public void deactivate_user_deletes_his_tokens() {
+    createAdminUser();
     logInAsSystemAdministrator();
     UserDto user = db.users().insertUser();
     db.users().insertToken(user);
@@ -139,6 +141,7 @@ public class DeactivateActionTest {
 
   @Test
   public void deactivate_user_deletes_his_properties() {
+    createAdminUser();
     logInAsSystemAdministrator();
     UserDto user = db.users().insertUser();
     ComponentDto project = db.components().insertPrivateProject();
@@ -154,6 +157,7 @@ public class DeactivateActionTest {
 
   @Test
   public void deactivate_user_deletes_his_permissions() {
+    createAdminUser();
     logInAsSystemAdministrator();
     UserDto user = db.users().insertUser();
     ComponentDto project = db.components().insertPrivateProject();
@@ -164,12 +168,13 @@ public class DeactivateActionTest {
 
     deactivate(user.getLogin());
 
-    assertThat(db.getDbClient().userPermissionDao().selectGlobalPermissionsOfUser(dbSession, user.getUuid(), db.getDefaultOrganization().getUuid())).isEmpty();
+    assertThat(db.getDbClient().userPermissionDao().selectGlobalPermissionsOfUser(dbSession, user.getUuid())).isEmpty();
     assertThat(db.getDbClient().userPermissionDao().selectProjectPermissionsOfUser(dbSession, user.getUuid(), project.uuid())).isEmpty();
   }
 
   @Test
   public void deactivate_user_deletes_his_permission_templates() {
+    createAdminUser();
     logInAsSystemAdministrator();
     UserDto user = db.users().insertUser();
     PermissionTemplateDto template = db.permissionTemplates().insertTemplate();
@@ -187,9 +192,10 @@ public class DeactivateActionTest {
 
   @Test
   public void deactivate_user_deletes_his_qprofiles_permissions() {
+    createAdminUser();
     logInAsSystemAdministrator();
     UserDto user = db.users().insertUser();
-    QProfileDto profile = db.qualityProfiles().insert(db.getDefaultOrganization());
+    QProfileDto profile = db.qualityProfiles().insert();
     db.qualityProfiles().addUserPermission(profile, user);
 
     deactivate(user.getLogin());
@@ -199,6 +205,7 @@ public class DeactivateActionTest {
 
   @Test
   public void deactivate_user_deletes_his_default_assignee_settings() {
+    createAdminUser();
     logInAsSystemAdministrator();
     UserDto user = db.users().insertUser();
     ComponentDto project = db.components().insertPrivateProject();
@@ -215,6 +222,7 @@ public class DeactivateActionTest {
 
   @Test
   public void deactivate_user_deletes_his_organization_membership() {
+    createAdminUser();
     logInAsSystemAdministrator();
     UserDto user = db.users().insertUser();
     OrganizationDto organization = db.organizations().insert();
@@ -230,6 +238,7 @@ public class DeactivateActionTest {
 
   @Test
   public void deactivate_user_deletes_his_user_settings() {
+    createAdminUser();
     logInAsSystemAdministrator();
     UserDto user = db.users().insertUser();
     db.users().insertUserSetting(user);
@@ -245,10 +254,9 @@ public class DeactivateActionTest {
 
   @Test
   public void deactivate_user_deletes_his_alm_pat() {
+    createAdminUser();
     logInAsSystemAdministrator();
-
     AlmSettingDto almSettingDto = db.almSettings().insertBitbucketAlmSetting();
-
     UserDto user = db.users().insertUser();
     db.almPats().insert(p -> p.setUserUuid(user.getUuid()), p -> p.setAlmSettingUuid(almSettingDto.getUuid()));
     UserDto anotherUser = db.users().insertUser();
@@ -262,12 +270,13 @@ public class DeactivateActionTest {
 
   @Test
   public void deactivate_user_deletes_his_session_tokens() {
+    createAdminUser();
     logInAsSystemAdministrator();
     UserDto user = db.users().insertUser();
     SessionTokenDto sessionToken1 = db.users().insertSessionToken(user);
-    SessionTokenDto sessionToken2 =db.users().insertSessionToken(user);
+    SessionTokenDto sessionToken2 = db.users().insertSessionToken(user);
     UserDto anotherUser = db.users().insertUser();
-    SessionTokenDto sessionToken3 =db.users().insertSessionToken(anotherUser);
+    SessionTokenDto sessionToken3 = db.users().insertSessionToken(anotherUser);
 
     deactivate(user.getLogin());
 
@@ -277,7 +286,30 @@ public class DeactivateActionTest {
   }
 
   @Test
+  public void deactivate_user_deletes_his_dismissed_messages() {
+    createAdminUser();
+    logInAsSystemAdministrator();
+    ProjectDto project1 = db.components().insertPrivateProjectDto();
+    ProjectDto project2 = db.components().insertPrivateProjectDto();
+    UserDto user = db.users().insertUser();
+
+    db.users().insertUserDismissedMessage(user, project1, CeTaskMessageType.SUGGEST_DEVELOPER_EDITION_UPGRADE);
+    db.users().insertUserDismissedMessage(user, project2, CeTaskMessageType.SUGGEST_DEVELOPER_EDITION_UPGRADE);
+    UserDto anotherUser = db.users().insertUser();
+    UserDismissedMessageDto msg3 = db.users().insertUserDismissedMessage(anotherUser, project1, CeTaskMessageType.SUGGEST_DEVELOPER_EDITION_UPGRADE);
+    UserDismissedMessageDto msg4 = db.users().insertUserDismissedMessage(anotherUser, project2, CeTaskMessageType.SUGGEST_DEVELOPER_EDITION_UPGRADE);
+
+    deactivate(user.getLogin());
+
+    assertThat(db.getDbClient().userDismissedMessagesDao().selectByUser(dbSession, user)).isEmpty();
+    assertThat(db.getDbClient().userDismissedMessagesDao().selectByUser(dbSession, anotherUser))
+      .extracting(UserDismissedMessageDto::getUuid)
+      .containsExactlyInAnyOrder(msg3.getUuid(), msg4.getUuid());
+  }
+
+  @Test
   public void user_cannot_deactivate_itself_on_sonarqube() {
+    createAdminUser();
     UserDto user = db.users().insertUser();
     userSession.logIn(user.getLogin()).setSystemAdministrator();
 
@@ -291,6 +323,8 @@ public class DeactivateActionTest {
 
   @Test
   public void deactivation_requires_to_be_logged_in() {
+    createAdminUser();
+
     expectedException.expect(UnauthorizedException.class);
     expectedException.expectMessage("Authentication is required");
 
@@ -299,6 +333,7 @@ public class DeactivateActionTest {
 
   @Test
   public void deactivation_requires_administrator_permission_on_sonarqube() {
+    createAdminUser();
     userSession.logIn();
 
     expectedException.expect(ForbiddenException.class);
@@ -309,6 +344,7 @@ public class DeactivateActionTest {
 
   @Test
   public void fail_if_user_does_not_exist() {
+    createAdminUser();
     logInAsSystemAdministrator();
 
     expectedException.expect(NotFoundException.class);
@@ -319,6 +355,7 @@ public class DeactivateActionTest {
 
   @Test
   public void fail_if_login_is_blank() {
+    createAdminUser();
     logInAsSystemAdministrator();
 
     expectedException.expect(IllegalArgumentException.class);
@@ -329,6 +366,7 @@ public class DeactivateActionTest {
 
   @Test
   public void fail_if_login_is_missing() {
+    createAdminUser();
     logInAsSystemAdministrator();
 
     expectedException.expect(IllegalArgumentException.class);
@@ -338,7 +376,7 @@ public class DeactivateActionTest {
   }
 
   @Test
-  public void fail_to_deactivate_last_administrator_of_default_organization() {
+  public void fail_to_deactivate_last_administrator() {
     UserDto admin = db.users().insertUser();
     db.users().insertPermissionOnUser(admin, ADMINISTER);
     logInAsSystemAdministrator();
@@ -350,33 +388,9 @@ public class DeactivateActionTest {
   }
 
   @Test
-  public void fail_to_deactivate_last_administrator_of_organization() {
-    // user1 is the unique administrator of org1 and org2.
-    // user1 and user2 are both administrators of org3
-    UserDto user1 = db.users().insertUser(u -> u.setLogin("test"));
-    OrganizationDto org1 = db.organizations().insert(newOrganizationDto().setKey("org1"));
-    OrganizationDto org2 = db.organizations().insert(newOrganizationDto().setKey("org2"));
-    OrganizationDto org3 = db.organizations().insert(newOrganizationDto().setKey("org3"));
-    db.users().insertPermissionOnUser(org1, user1, ADMINISTER);
-    db.users().insertPermissionOnUser(org2, user1, ADMINISTER);
-    db.users().insertPermissionOnUser(org3, user1, ADMINISTER);
-    UserDto user2 = db.users().insertUser();
-    db.users().insertPermissionOnUser(org3, user2, ADMINISTER);
-    logInAsSystemAdministrator();
-
-    expectedException.expect(BadRequestException.class);
-    expectedException.expectMessage("User 'test' is last administrator of organizations [org1, org2], and cannot be deactivated");
-
-    deactivate(user1.getLogin());
-  }
-
-  @Test
   public void administrators_can_be_deactivated_if_there_are_still_other_administrators() {
-    UserDto admin = db.users().insertUser();
-    UserDto anotherAdmin = db.users().insertUser();
-    db.users().insertPermissionOnUser(admin, ADMINISTER);
-    db.users().insertPermissionOnUser(anotherAdmin, ADMINISTER);
-    db.commit();
+    UserDto admin = createAdminUser();;
+    UserDto anotherAdmin = createAdminUser();
     logInAsSystemAdministrator();
 
     deactivate(admin.getLogin());
@@ -394,6 +408,7 @@ public class DeactivateActionTest {
 
   @Test
   public void test_example() {
+    createAdminUser();
     UserDto user = db.users().insertUser(u -> u
       .setLogin("ada.lovelace")
       .setEmail("ada.lovelace@noteg.com")
@@ -432,6 +447,13 @@ public class DeactivateActionTest {
     assertThat(user.get().isActive()).isFalse();
     assertThat(user.get().getEmail()).isNull();
     assertThat(user.get().getScmAccountsAsList()).isEmpty();
+  }
+
+  private UserDto createAdminUser() {
+    UserDto admin = db.users().insertUser();
+    db.users().insertPermissionOnUser(admin, ADMINISTER);
+    db.commit();
+    return admin;
   }
 
 }

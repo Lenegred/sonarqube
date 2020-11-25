@@ -37,14 +37,12 @@ import org.sonar.db.DbSession;
 import org.sonar.db.DbTester;
 import org.sonar.db.user.GroupDto;
 import org.sonar.db.user.UserDto;
-import org.sonar.db.user.UserPropertyDto;
 import org.sonar.server.authentication.CredentialsLocalAuthentication;
 import org.sonar.server.authentication.CredentialsLocalAuthentication.HashMethod;
 import org.sonar.server.es.EsTester;
 import org.sonar.server.exceptions.BadRequestException;
 import org.sonar.server.organization.DefaultOrganizationProvider;
 import org.sonar.server.organization.TestDefaultOrganizationProvider;
-import org.sonar.server.organization.TestOrganizationFlags;
 import org.sonar.server.user.index.UserIndexDefinition;
 import org.sonar.server.user.index.UserIndexer;
 import org.sonar.server.usergroups.DefaultGroupFinder;
@@ -68,10 +66,8 @@ public class UserUpdaterCreateTest {
 
   @Rule
   public ExpectedException expectedException = ExpectedException.none();
-
   @Rule
   public EsTester es = EsTester.create();
-
   @Rule
   public DbTester db = DbTester.create(system2);
 
@@ -81,11 +77,10 @@ public class UserUpdaterCreateTest {
   private DbSession session = db.getSession();
   private UserIndexer userIndexer = new UserIndexer(dbClient, es.client());
   private DefaultOrganizationProvider defaultOrganizationProvider = TestDefaultOrganizationProvider.from(db);
-  private TestOrganizationFlags organizationFlags = TestOrganizationFlags.standalone();
   private MapSettings settings = new MapSettings();
   private CredentialsLocalAuthentication localAuthentication = new CredentialsLocalAuthentication(db.getDbClient());
 
-  private UserUpdater underTest = new UserUpdater(system2, newUserNotifier, dbClient, userIndexer, organizationFlags, defaultOrganizationProvider,
+  private UserUpdater underTest = new UserUpdater(newUserNotifier, dbClient, userIndexer, defaultOrganizationProvider,
     new DefaultGroupFinder(dbClient), settings.asConfig(), localAuthentication);
 
   @Test
@@ -305,23 +300,6 @@ public class UserUpdaterCreateTest {
   }
 
   @Test
-  public void set_notifications_readDate_setting_when_creating_user_and_organization_enabled() {
-    long now = system2.now();
-    organizationFlags.setEnabled(true);
-    createDefaultGroup();
-
-    UserDto user = underTest.createAndCommit(db.getSession(), NewUser.builder()
-      .setLogin("userLogin")
-      .setName("UserName")
-      .build(), u -> {
-      });
-
-    UserPropertyDto notificationReadDateSetting = dbClient.userPropertiesDao().selectByUser(session, user).get(0);
-    assertThat(notificationReadDateSetting.getKey()).isEqualTo("notifications.readDate");
-    assertThat(Long.parseLong(notificationReadDateSetting.getValue())).isGreaterThanOrEqualTo(now);
-  }
-
-  @Test
   public void does_not_set_notifications_readDate_setting_when_creating_user_when_not_on_and_organization_disabled() {
     createDefaultGroup();
 
@@ -476,7 +454,7 @@ public class UserUpdaterCreateTest {
       .setName("Marius")
       .setEmail("marius@mail.com")
       .setPassword("password")
-      .setScmAccounts(asList("jo"))
+      .setScmAccounts(singletonList("jo"))
       .build(), u -> {
       });
   }
@@ -509,7 +487,7 @@ public class UserUpdaterCreateTest {
       .setName("Marius2")
       .setEmail("marius2@mail.com")
       .setPassword("password2")
-      .setScmAccounts(asList(DEFAULT_LOGIN))
+      .setScmAccounts(singletonList(DEFAULT_LOGIN))
       .build(), u -> {
       });
   }
@@ -524,7 +502,7 @@ public class UserUpdaterCreateTest {
       .setName("Marius2")
       .setEmail("marius2@mail.com")
       .setPassword("password2")
-      .setScmAccounts(asList("marius2@mail.com"))
+      .setScmAccounts(singletonList("marius2@mail.com"))
       .build(), u -> {
       });
   }
@@ -581,7 +559,7 @@ public class UserUpdaterCreateTest {
   }
 
   @Test
-  public void associate_default_group_when_creating_user_and_organizations_are_disabled() {
+  public void associate_default_group_when_creating_user() {
     GroupDto defaultGroup = createDefaultGroup();
 
     underTest.createAndCommit(db.getSession(), NewUser.builder()
@@ -592,25 +570,8 @@ public class UserUpdaterCreateTest {
       .build(), u -> {
       });
 
-    Multimap<String, String> groups = dbClient.groupMembershipDao().selectGroupsByLogins(session, asList("user"));
+    Multimap<String, String> groups = dbClient.groupMembershipDao().selectGroupsByLogins(session, singletonList("user"));
     assertThat(groups.get("user")).containsOnly(defaultGroup.getName());
-  }
-
-  @Test
-  public void does_not_associate_default_group_when_creating_user_and_organizations_are_enabled() {
-    organizationFlags.setEnabled(true);
-    createDefaultGroup();
-
-    underTest.createAndCommit(db.getSession(), NewUser.builder()
-      .setLogin("user")
-      .setName("User")
-      .setEmail("user@mail.com")
-      .setPassword("password")
-      .build(), u -> {
-      });
-
-    Multimap<String, String> groups = dbClient.groupMembershipDao().selectGroupsByLogins(session, asList("user"));
-    assertThat(groups.get("user")).isEmpty();
   }
 
   @Test
@@ -643,23 +604,7 @@ public class UserUpdaterCreateTest {
     assertThat(dbClient.organizationMemberDao().select(db.getSession(), defaultOrganizationProvider.get().getUuid(), dto.getUuid())).isPresent();
   }
 
-  @Test
-  public void does_not_add_user_as_member_of_default_organization_when_creating_user_and_organizations_are_enabled() {
-    organizationFlags.setEnabled(true);
-    createDefaultGroup();
-
-    UserDto dto = underTest.createAndCommit(db.getSession(), NewUser.builder()
-      .setLogin("user")
-      .setName("User")
-      .setEmail("user@mail.com")
-      .setPassword("PASSWORD")
-      .build(), u -> {
-      });
-
-    assertThat(dbClient.organizationMemberDao().select(db.getSession(), defaultOrganizationProvider.get().getUuid(), dto.getUuid())).isNotPresent();
-  }
-
   private GroupDto createDefaultGroup() {
-    return db.users().insertDefaultGroup(db.getDefaultOrganization());
+    return db.users().insertDefaultGroup();
   }
 }

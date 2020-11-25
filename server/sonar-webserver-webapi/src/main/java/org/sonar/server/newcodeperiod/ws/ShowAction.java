@@ -38,7 +38,7 @@ import org.sonar.server.user.UserSession;
 import org.sonarqube.ws.NewCodePeriods;
 
 import static java.lang.String.format;
-import static org.sonar.db.permission.OrganizationPermission.SCAN;
+import static org.sonar.db.permission.GlobalPermission.SCAN;
 import static org.sonar.server.user.AbstractUserSession.insufficientPrivilegesException;
 import static org.sonar.server.ws.WsUtils.writeProtobuf;
 import static org.sonarqube.ws.NewCodePeriods.ShowWSResponse;
@@ -124,7 +124,7 @@ public class ShowAction implements NewCodePeriodsWsAction {
   private void checkPermission(ProjectDto project) {
     if (userSession.hasProjectPermission(UserRole.SCAN, project) ||
       userSession.hasProjectPermission(UserRole.ADMIN, project) ||
-      userSession.hasPermission(SCAN, project.getOrganizationUuid())) {
+      userSession.hasPermission(SCAN)) {
       return;
     }
     throw insufficientPrivilegesException();

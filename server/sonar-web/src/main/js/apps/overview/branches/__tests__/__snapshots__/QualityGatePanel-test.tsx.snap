@@ -10,9 +10,15 @@ exports[`should render correctly for applications 1`] = `
   >
     overview.quality_gate
      
-    <DocTooltip
+    <HelpTooltip
       className="little-spacer-left"
-      doc={Promise {}}
+      overlay={
+        <div
+          className="big-padded-top big-padded-bottom"
+        >
+          overview.quality_gate.help
+        </div>
+      }
     />
   </h2>
   <div
@@ -76,13 +82,11 @@ exports[`should render correctly for applications 1`] = `
                     "name": "Coverage",
                     "type": "PERCENT",
                   },
-                  "periods": Array [
-                    Object {
-                      "bestValue": true,
-                      "index": 1,
-                      "value": "1.0",
-                    },
-                  ],
+                  "period": Object {
+                    "bestValue": true,
+                    "index": 1,
+                    "value": "1.0",
+                  },
                   "value": "1.0",
                 },
                 "metric": "foo",
@@ -137,13 +141,11 @@ exports[`should render correctly for applications 1`] = `
                     "name": "Coverage",
                     "type": "PERCENT",
                   },
-                  "periods": Array [
-                    Object {
-                      "bestValue": true,
-                      "index": 1,
-                      "value": "1.0",
-                    },
-                  ],
+                  "period": Object {
+                    "bestValue": true,
+                    "index": 1,
+                    "value": "1.0",
+                  },
                   "value": "1.0",
                 },
                 "metric": "foo",
@@ -162,13 +164,11 @@ exports[`should render correctly for applications 1`] = `
                     "name": "New_code_smells",
                     "type": "PERCENT",
                   },
-                  "periods": Array [
-                    Object {
-                      "bestValue": true,
-                      "index": 1,
-                      "value": "1.0",
-                    },
-                  ],
+                  "period": Object {
+                    "bestValue": true,
+                    "index": 1,
+                    "value": "1.0",
+                  },
                   "value": "1.0",
                 },
                 "metric": "new_code_smells",
@@ -197,9 +197,15 @@ exports[`should render correctly for applications 2`] = `
   >
     overview.quality_gate
      
-    <DocTooltip
+    <HelpTooltip
       className="little-spacer-left"
-      doc={Promise {}}
+      overlay={
+        <div
+          className="big-padded-top big-padded-bottom"
+        >
+          overview.quality_gate.help
+        </div>
+      }
     />
   </h2>
   <div
@@ -263,13 +269,11 @@ exports[`should render correctly for applications 2`] = `
                     "name": "Coverage",
                     "type": "PERCENT",
                   },
-                  "periods": Array [
-                    Object {
-                      "bestValue": true,
-                      "index": 1,
-                      "value": "1.0",
-                    },
-                  ],
+                  "period": Object {
+                    "bestValue": true,
+                    "index": 1,
+                    "value": "1.0",
+                  },
                   "value": "1.0",
                 },
                 "metric": "foo",
@@ -333,9 +337,15 @@ exports[`should render correctly for projects 1`] = `
   >
     overview.quality_gate
      
-    <DocTooltip
+    <HelpTooltip
       className="little-spacer-left"
-      doc={Promise {}}
+      overlay={
+        <div
+          className="big-padded-top big-padded-bottom"
+        >
+          overview.quality_gate.help
+        </div>
+      }
     />
   </h2>
   <div
@@ -399,13 +409,11 @@ exports[`should render correctly for projects 1`] = `
                     "name": "Coverage",
                     "type": "PERCENT",
                   },
-                  "periods": Array [
-                    Object {
-                      "bestValue": true,
-                      "index": 1,
-                      "value": "1.0",
-                    },
-                  ],
+                  "period": Object {
+                    "bestValue": true,
+                    "index": 1,
+                    "value": "1.0",
+                  },
                   "value": "1.0",
                 },
                 "metric": "foo",
@@ -434,9 +442,15 @@ exports[`should render correctly for projects 2`] = `
   >
     overview.quality_gate
      
-    <DocTooltip
+    <HelpTooltip
       className="little-spacer-left"
-      doc={Promise {}}
+      overlay={
+        <div
+          className="big-padded-top big-padded-bottom"
+        >
+          overview.quality_gate.help
+        </div>
+      }
     />
   </h2>
   <div
@@ -470,9 +484,15 @@ exports[`should render correctly for projects 3`] = `
   >
     overview.quality_gate
      
-    <DocTooltip
+    <HelpTooltip
       className="little-spacer-left"
-      doc={Promise {}}
+      overlay={
+        <div
+          className="big-padded-top big-padded-bottom"
+        >
+          overview.quality_gate.help
+        </div>
+      }
     />
   </h2>
   <Alert
@@ -551,13 +571,11 @@ exports[`should render correctly for projects 3`] = `
                     "name": "Coverage",
                     "type": "PERCENT",
                   },
-                  "periods": Array [
-                    Object {
-                      "bestValue": true,
-                      "index": 1,
-                      "value": "1.0",
-                    },
-                  ],
+                  "period": Object {
+                    "bestValue": true,
+                    "index": 1,
+                    "value": "1.0",
+                  },
                   "value": "1.0",
                 },
                 "metric": "foo",

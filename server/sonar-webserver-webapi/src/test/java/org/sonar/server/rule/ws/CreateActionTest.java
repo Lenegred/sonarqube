@@ -35,8 +35,6 @@ import org.sonar.db.rule.RuleDto;
 import org.sonar.server.es.EsTester;
 import org.sonar.server.exceptions.ForbiddenException;
 import org.sonar.server.exceptions.UnauthorizedException;
-import org.sonar.server.organization.DefaultOrganizationProvider;
-import org.sonar.server.organization.TestDefaultOrganizationProvider;
 import org.sonar.server.rule.RuleCreator;
 import org.sonar.server.rule.index.RuleIndexer;
 import org.sonar.server.tester.UserSessionRule;
@@ -52,7 +50,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.sonar.api.rules.RuleType.BUG;
 import static org.sonar.api.rules.RuleType.CODE_SMELL;
-import static org.sonar.db.permission.OrganizationPermission.ADMINISTER_QUALITY_PROFILES;
+import static org.sonar.db.permission.GlobalPermission.ADMINISTER_QUALITY_PROFILES;
 import static org.sonar.db.rule.RuleTesting.newCustomRule;
 import static org.sonar.db.rule.RuleTesting.newTemplateRule;
 import static org.sonar.server.util.TypeValidationsTesting.newFullTypeValidations;
@@ -74,14 +72,12 @@ public class CreateActionTest {
   @Rule
   public EsTester es = EsTester.create();
 
-  private DefaultOrganizationProvider defaultOrganizationProvider = TestDefaultOrganizationProvider.from(db);
   private UuidFactory uuidFactory = new SequenceUuidFactory();
 
   private WsActionTester ws = new WsActionTester(new CreateAction(db.getDbClient(),
-    new RuleCreator(system2, new RuleIndexer(es.client(), db.getDbClient()), db.getDbClient(), newFullTypeValidations(),
-      TestDefaultOrganizationProvider.from(db), uuidFactory),
+    new RuleCreator(system2, new RuleIndexer(es.client(), db.getDbClient()), db.getDbClient(), newFullTypeValidations(), uuidFactory),
     new RuleMapper(new Languages(), createMacroInterpreter()),
-    new RuleWsSupport(db.getDbClient(), userSession, defaultOrganizationProvider)));
+    new RuleWsSupport(db.getDbClient(), userSession)));
 
   @Test
   public void check_definition() {
@@ -90,12 +86,12 @@ public class CreateActionTest {
     assertThat(ws.getDef().responseExampleAsString()).isNotNull();
     assertThat(ws.getDef().description()).isNotNull();
   }
-  
+
   @Test
   public void create_custom_rule() {
     logInAsQProfileAdministrator();
     // Template rule
-    RuleDto templateRule = newTemplateRule(RuleKey.of("java", "S001"), db.getDefaultOrganization()).setType(CODE_SMELL);
+    RuleDto templateRule = newTemplateRule(RuleKey.of("java", "S001")).setType(CODE_SMELL);
     db.rules().insert(templateRule.getDefinition());
     db.rules().insertOrUpdateMetadata(templateRule.getMetadata().setRuleUuid(templateRule.getUuid()));
     db.rules().insertRuleParam(templateRule.getDefinition(), param -> param.setName("regex").setType("STRING").setDescription("Reg ex").setDefaultValue(".*"));
@@ -238,7 +234,7 @@ public class CreateActionTest {
   private void logInAsQProfileAdministrator() {
     userSession
       .logIn()
-      .addPermission(ADMINISTER_QUALITY_PROFILES, defaultOrganizationProvider.get().getUuid());
+      .addPermission(ADMINISTER_QUALITY_PROFILES);
   }
 
 }

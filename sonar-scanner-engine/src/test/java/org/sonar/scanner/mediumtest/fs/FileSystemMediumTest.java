@@ -751,6 +751,7 @@ public class FileSystemMediumTest {
       .newAnalysis(new File(projectDir, "sonar-project.properties"))
       .property("sonar.exclusions", "**/*.xoo.measures,**/*.xoo.scm")
       .property("sonar.test.exclusions", "**/*.xoo.measures,**/*.xoo.scm")
+      .property("sonar.scm.exclusions.disabled", "true")
       .execute();
 
     assertThat(result.inputFiles()).hasSize(3);
@@ -766,7 +767,8 @@ public class FileSystemMediumTest {
     ScannerMediumTester.AnalysisBuilder analysis = tester
       .newAnalysis(new File(projectDir, "sonar-project.properties"))
       .property("sonar.sources", "XOURCES")
-      .property("sonar.tests", "TESTX");
+      .property("sonar.tests", "TESTX")
+      .property("sonar.scm.exclusions.disabled", "true");
 
     if (System2.INSTANCE.isOsWindows()) { // Windows is file path case-insensitive
       AnalysisResult result = analysis.execute();

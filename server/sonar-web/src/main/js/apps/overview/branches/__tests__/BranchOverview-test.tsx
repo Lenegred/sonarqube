@@ -67,7 +67,7 @@ jest.mock('../../../../api/measures', () => {
         measures.push(
           mockMeasure({
             metric: key,
-            ...(isDiffMetric(key) ? { leak: '1' } : { periods: undefined })
+            ...(isDiffMetric(key) ? { leak: '1' } : { period: undefined })
           })
         );
       });
@@ -254,7 +254,7 @@ describe('application overview', () => {
   });
 
   it('should fetch correctly other branch', async () => {
-    const wrapper = shallowRender({ branchLike: mockBranch(), component });
+    const wrapper = shallowRender({ branch: mockBranch(), component });
     await waitAndUpdate(wrapper);
     expect(getApplicationDetails).toHaveBeenCalled();
     expect(wrapper).toMatchSnapshot();
@@ -358,7 +358,7 @@ it('should correctly handle graph type storage', () => {
 function shallowRender(props: Partial<BranchOverview['props']> = {}) {
   return shallow<BranchOverview>(
     <BranchOverview
-      branchLike={mockMainBranch()}
+      branch={mockMainBranch()}
       component={mockComponent({
         breadcrumbs: [mockComponent({ key: 'foo' })],
         key: 'foo',

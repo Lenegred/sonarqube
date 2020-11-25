@@ -34,7 +34,7 @@ public class LinesJsonWriter {
     this.htmlSourceDecorator = htmlSourceDecorator;
   }
 
-  public void writeSource(Iterable<DbFileSources.Line> lines, JsonWriter json, boolean showScmAuthors, Supplier<Optional<Long>> periodDateSupplier) {
+  public void writeSource(Iterable<DbFileSources.Line> lines, JsonWriter json, Supplier<Optional<Long>> periodDateSupplier) {
     Optional<Long> periodDate = null;
 
     json.name("sources").beginArray();
@@ -43,27 +43,22 @@ public class LinesJsonWriter {
         .prop("line", line.getLine())
         .prop("code", htmlSourceDecorator.getDecoratedSourceAsHtml(line.getSource(), line.getHighlighting(), line.getSymbols()))
         .prop("scmRevision", line.getScmRevision());
-      if (showScmAuthors) {
-        json.prop("scmAuthor", line.getScmAuthor());
-      }
+      json.prop("scmAuthor", line.getScmAuthor());
       if (line.hasScmDate()) {
         json.prop("scmDate", DateUtils.formatDateTime(new Date(line.getScmDate())));
       }
-      Optional<Integer> lineHits = getLineHits(line);
-      if (lineHits.isPresent()) {
-        json.prop("utLineHits", lineHits.get());
-        json.prop("lineHits", lineHits.get());
-      }
-      Optional<Integer> conditions = getConditions(line);
-      if (conditions.isPresent()) {
-        json.prop("utConditions", conditions.get());
-        json.prop("conditions", conditions.get());
-      }
-      Optional<Integer> coveredConditions = getCoveredConditions(line);
-      if (coveredConditions.isPresent()) {
-        json.prop("utCoveredConditions", coveredConditions.get());
-        json.prop("coveredConditions", coveredConditions.get());
-      }
+      getLineHits(line).ifPresent(lh -> {
+        json.prop("utLineHits", lh);
+        json.prop("lineHits", lh);
+      });
+      getConditions(line).ifPresent(conditions -> {
+        json.prop("utConditions", conditions);
+        json.prop("conditions", conditions);
+      });
+      getCoveredConditions(line).ifPresent(coveredConditions -> {
+        json.prop("utCoveredConditions", coveredConditions);
+        json.prop("coveredConditions", coveredConditions);
+      });
       json.prop("duplicated", line.getDuplicationCount() > 0);
       if (line.hasIsNewLine()) {
         json.prop("isNew", line.getIsNewLine());

@@ -58,7 +58,7 @@ public class IssuesWsParameters {
   public static final String PARAM_MODULE_UUIDS = "moduleUuids";
   public static final String PARAM_PROJECTS = "projects";
   public static final String PARAM_DIRECTORIES = "directories";
-  public static final String PARAM_FILE_UUIDS = "fileUuids";
+  public static final String PARAM_FILES = "files";
   public static final String PARAM_ON_COMPONENT_ONLY = "onComponentOnly";
   public static final String PARAM_BRANCH = "branch";
   public static final String PARAM_PULL_REQUEST = "pullRequest";
@@ -80,6 +80,7 @@ public class IssuesWsParameters {
   public static final String DEPRECATED_PARAM_AUTHORS = "authors";
 
   public static final String PARAM_AUTHOR = "author";
+  public static final String PARAM_SCOPES = "scopes";
   public static final String PARAM_LANGUAGES = "languages";
   public static final String PARAM_TAGS = "tags";
   public static final String PARAM_TYPES = "types";

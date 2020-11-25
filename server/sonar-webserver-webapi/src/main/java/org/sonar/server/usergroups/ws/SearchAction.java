@@ -27,14 +27,12 @@ import java.util.Set;
 import org.sonar.api.server.ws.Change;
 import org.sonar.api.server.ws.Request;
 import org.sonar.api.server.ws.Response;
-import org.sonar.api.server.ws.WebService;
 import org.sonar.api.server.ws.WebService.NewController;
 import org.sonar.api.server.ws.WebService.Param;
 import org.sonar.api.utils.Paging;
 import org.sonar.core.util.stream.MoreCollectors;
 import org.sonar.db.DbClient;
 import org.sonar.db.DbSession;
-import org.sonar.db.organization.OrganizationDto;
 import org.sonar.db.user.GroupDto;
 import org.sonar.server.es.SearchOptions;
 import org.sonar.server.user.UserSession;
@@ -43,9 +41,8 @@ import org.sonar.server.usergroups.DefaultGroupFinder;
 import static java.util.Optional.ofNullable;
 import static org.apache.commons.lang.StringUtils.defaultIfBlank;
 import static org.sonar.api.utils.Paging.forPageIndex;
-import static org.sonar.db.permission.OrganizationPermission.ADMINISTER;
-import static org.sonar.server.es.SearchOptions.MAX_LIMIT;
-import static org.sonar.server.usergroups.ws.GroupWsSupport.PARAM_ORGANIZATION_KEY;
+import static org.sonar.db.permission.GlobalPermission.ADMINISTER;
+import static org.sonar.server.es.SearchOptions.MAX_PAGE_SIZE;
 import static org.sonar.server.ws.WsUtils.writeProtobuf;
 import static org.sonarqube.ws.UserGroups.Group;
 import static org.sonarqube.ws.UserGroups.SearchWsResponse;
@@ -59,37 +56,29 @@ public class SearchAction implements UserGroupsWsAction {
 
   private final DbClient dbClient;
   private final UserSession userSession;
-  private final GroupWsSupport groupWsSupport;
   private final DefaultGroupFinder defaultGroupFinder;
 
-  public SearchAction(DbClient dbClient, UserSession userSession, GroupWsSupport groupWsSupport, DefaultGroupFinder defaultGroupFinder) {
+  public SearchAction(DbClient dbClient, UserSession userSession, DefaultGroupFinder defaultGroupFinder) {
     this.dbClient = dbClient;
     this.userSession = userSession;
-    this.groupWsSupport = groupWsSupport;
     this.defaultGroupFinder = defaultGroupFinder;
   }
 
   @Override
   public void define(NewController context) {
-    WebService.NewAction action = context.createAction("search")
+    context.createAction("search")
       .setDescription("Search for user groups.<br>" +
         "Requires the following permission: 'Administer System'.")
       .setHandler(this)
       .setResponseExample(getClass().getResource("search-example.json"))
       .setSince("5.2")
       .addFieldsParam(ALL_FIELDS)
-      .addPagingParams(100, MAX_LIMIT)
+      .addPagingParams(100, MAX_PAGE_SIZE)
       .addSearchQuery("sonar-users", "names")
       .setChangelog(
         new Change("8.4", "Field 'id' in the response is deprecated. Format changes from integer to string."),
         new Change("6.4", "Paging response fields moved to a Paging object"),
         new Change("6.4", "'default' response field has been added"));
-
-    action.createParam(PARAM_ORGANIZATION_KEY)
-      .setDescription("Key of organization. If not set then groups are searched in default organization.")
-      .setExampleValue("my-org")
-      .setSince("6.2")
-      .setInternal(true);
   }
 
   @Override
@@ -103,13 +92,12 @@ public class SearchAction implements UserGroupsWsAction {
     Set<String> fields = neededFields(request);
 
     try (DbSession dbSession = dbClient.openSession(false)) {
-      OrganizationDto organization = groupWsSupport.findOrganizationByKey(dbSession, request.param(PARAM_ORGANIZATION_KEY));
-      userSession.checkLoggedIn().checkPermission(ADMINISTER, organization);
-      GroupDto defaultGroup = defaultGroupFinder.findDefaultGroup(dbSession, organization.getUuid());
+      userSession.checkLoggedIn().checkPermission(ADMINISTER);
+      GroupDto defaultGroup = defaultGroupFinder.findDefaultGroup(dbSession);
 
-      int limit = dbClient.groupDao().countByQuery(dbSession, organization.getUuid(), query);
+      int limit = dbClient.groupDao().countByQuery(dbSession, query);
       Paging paging = forPageIndex(page).withPageSize(pageSize).andTotal(limit);
-      List<GroupDto> groups = dbClient.groupDao().selectByQuery(dbSession, organization.getUuid(), query, options.getOffset(), pageSize);
+      List<GroupDto> groups = dbClient.groupDao().selectByQuery(dbSession, query, options.getOffset(), pageSize);
       List<String> groupUuids = groups.stream().map(GroupDto::getUuid).collect(MoreCollectors.toList(groups.size()));
       Map<String, Integer> userCountByGroup = dbClient.groupMembershipDao().countUsersByGroups(dbSession, groupUuids);
       writeProtobuf(buildResponse(groups, userCountByGroup, fields, paging, defaultGroup), request, response);
@@ -141,7 +129,7 @@ public class SearchAction implements UserGroupsWsAction {
 
   private static Group toWsGroup(GroupDto group, Integer memberCount, Set<String> fields, boolean isDefault) {
     Group.Builder groupBuilder = Group.newBuilder()
-      .setUuid(group.getUuid())
+      .setId(group.getUuid())
       .setDefault(isDefault);
     if (fields.contains(FIELD_NAME)) {
       groupBuilder.setName(group.getName());

@@ -35,8 +35,8 @@ import org.sonar.server.ws.TestRequest;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
+import static org.sonar.db.permission.GlobalPermission.SCAN;
 import static org.sonar.db.permission.template.PermissionTemplateTesting.newPermissionTemplateDto;
-import static org.sonar.db.permission.OrganizationPermission.SCAN;
 import static org.sonar.test.JsonAssert.assertJson;
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_DESCRIPTION;
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_ID;
@@ -57,7 +57,6 @@ public class UpdateTemplateActionTest extends BasePermissionWsTest<UpdateTemplat
   public void setUp() {
     when(system.now()).thenReturn(1_440_512_328_743L);
     template = db.getDbClient().permissionTemplateDao().insert(db.getSession(), newPermissionTemplateDto()
-      .setOrganizationUuid(db.getDefaultOrganization().getUuid())
       .setName("Permission Template Name")
       .setDescription("Permission Template Description")
       .setKeyPattern(".*\\.pattern\\..*")
@@ -68,7 +67,7 @@ public class UpdateTemplateActionTest extends BasePermissionWsTest<UpdateTemplat
 
   @Test
   public void update_all_permission_template_fields() {
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
 
     String result = call(template.getUuid(), "Finance", "Permissions for financially related projects", ".*\\.finance\\..*");
 
@@ -86,7 +85,7 @@ public class UpdateTemplateActionTest extends BasePermissionWsTest<UpdateTemplat
 
   @Test
   public void update_with_the_same_values() {
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
 
     call(template.getUuid(), template.getName(), template.getDescription(), template.getKeyPattern());
 
@@ -98,7 +97,7 @@ public class UpdateTemplateActionTest extends BasePermissionWsTest<UpdateTemplat
 
   @Test
   public void update_name_only() {
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
 
     call(template.getUuid(), "Finance", null, null);
 
@@ -110,7 +109,7 @@ public class UpdateTemplateActionTest extends BasePermissionWsTest<UpdateTemplat
 
   @Test
   public void fail_if_key_is_not_found() {
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
 
     expectedException.expect(NotFoundException.class);
     expectedException.expectMessage("Permission template with id 'unknown-key' is not found");
@@ -120,7 +119,7 @@ public class UpdateTemplateActionTest extends BasePermissionWsTest<UpdateTemplat
 
   @Test
   public void fail_if_name_already_exists_in_another_template() {
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
     PermissionTemplateDto anotherTemplate = addTemplateToDefaultOrganization();
 
     expectedException.expect(BadRequestException.class);
@@ -131,7 +130,7 @@ public class UpdateTemplateActionTest extends BasePermissionWsTest<UpdateTemplat
 
   @Test
   public void fail_if_key_is_not_provided() {
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
 
     expectedException.expect(IllegalArgumentException.class);
 
@@ -140,7 +139,7 @@ public class UpdateTemplateActionTest extends BasePermissionWsTest<UpdateTemplat
 
   @Test
   public void fail_if_name_empty() {
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
 
     expectedException.expect(BadRequestException.class);
     expectedException.expectMessage("The template name must not be blank");
@@ -150,7 +149,7 @@ public class UpdateTemplateActionTest extends BasePermissionWsTest<UpdateTemplat
 
   @Test
   public void fail_if_name_has_just_whitespaces() {
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
 
     expectedException.expect(BadRequestException.class);
     expectedException.expectMessage("The template name must not be blank");
@@ -160,7 +159,7 @@ public class UpdateTemplateActionTest extends BasePermissionWsTest<UpdateTemplat
 
   @Test
   public void fail_if_regexp_if_not_valid() {
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
 
     expectedException.expect(BadRequestException.class);
     expectedException.expectMessage("The 'projectKeyPattern' parameter must be a valid Java regular expression. '[azerty' was passed");
@@ -170,7 +169,7 @@ public class UpdateTemplateActionTest extends BasePermissionWsTest<UpdateTemplat
 
   @Test
   public void fail_if_name_already_exists_in_database_case_insensitive() {
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
     PermissionTemplateDto anotherTemplate = addTemplateToDefaultOrganization();
 
     String nameCaseInsensitive = anotherTemplate.getName().toUpperCase();
@@ -190,7 +189,7 @@ public class UpdateTemplateActionTest extends BasePermissionWsTest<UpdateTemplat
 
   @Test
   public void fail_if_not_admin() {
-    userSession.logIn().addPermission(SCAN, db.getDefaultOrganization());
+    userSession.logIn().addPermission(SCAN);
 
     expectedException.expect(ForbiddenException.class);
 

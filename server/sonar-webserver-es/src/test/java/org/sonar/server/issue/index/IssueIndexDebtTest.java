@@ -23,11 +23,11 @@ import java.util.Map;
 import java.util.TimeZone;
 import org.junit.Rule;
 import org.junit.Test;
+import org.sonar.api.impl.utils.TestSystem2;
 import org.sonar.api.issue.Issue;
 import org.sonar.api.rule.RuleKey;
 import org.sonar.api.rule.Severity;
 import org.sonar.api.utils.System2;
-import org.sonar.api.impl.utils.TestSystem2;
 import org.sonar.db.DbTester;
 import org.sonar.db.component.ComponentDto;
 import org.sonar.db.component.ComponentTesting;
@@ -101,10 +101,10 @@ public class IssueIndexDebtTest {
       IssueDocTesting.newDoc("I4", file2).setEffort(10L),
       IssueDocTesting.newDoc("I5", file3).setEffort(10L));
 
-    Facets facets = search("fileUuids");
-    assertThat(facets.getNames()).containsOnly("fileUuids", FACET_MODE_EFFORT);
-    assertThat(facets.get("fileUuids"))
-      .containsOnly(entry("A", 10L), entry("ABCD", 10L), entry("BCDE", 20L), entry("CDEF", 10L));
+    Facets facets = search("files");
+    assertThat(facets.getNames()).containsOnly("files", FACET_MODE_EFFORT);
+    assertThat(facets.get("files"))
+      .containsOnly(entry(file1.path(), 10L), entry(file2.path(), 20L), entry(file3.path(), 10L));
     assertThat(facets.get(FACET_MODE_EFFORT)).containsOnly(entry("total", 50L));
   }
 

@@ -26,7 +26,7 @@ import org.sonar.api.resources.Languages;
 import org.sonar.api.server.ws.WebService;
 import org.sonar.db.DbTester;
 import org.sonar.db.organization.OrganizationDto;
-import org.sonar.db.permission.OrganizationPermission;
+import org.sonar.db.permission.GlobalPermission;
 import org.sonar.db.qualityprofile.QProfileDto;
 import org.sonar.db.user.UserDto;
 import org.sonar.server.exceptions.BadRequestException;
@@ -40,10 +40,9 @@ import org.sonar.server.ws.WsActionTester;
 
 import static java.lang.String.format;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.sonar.db.permission.OrganizationPermission.ADMINISTER_QUALITY_PROFILES;
+import static org.sonar.db.permission.GlobalPermission.ADMINISTER_QUALITY_PROFILES;
 import static org.sonarqube.ws.client.qualityprofile.QualityProfileWsParameters.PARAM_LANGUAGE;
 import static org.sonarqube.ws.client.qualityprofile.QualityProfileWsParameters.PARAM_LOGIN;
-import static org.sonarqube.ws.client.qualityprofile.QualityProfileWsParameters.PARAM_ORGANIZATION;
 import static org.sonarqube.ws.client.qualityprofile.QualityProfileWsParameters.PARAM_QUALITY_PROFILE;
 
 public class RemoveUserActionTest {
@@ -68,23 +67,22 @@ public class RemoveUserActionTest {
     assertThat(def.key()).isEqualTo("remove_user");
     assertThat(def.isPost()).isTrue();
     assertThat(def.isInternal()).isTrue();
-    assertThat(def.params()).extracting(WebService.Param::key).containsExactlyInAnyOrder("organization", "qualityProfile", "language", "login");
+    assertThat(def.params()).extracting(WebService.Param::key).containsExactlyInAnyOrder("qualityProfile", "language", "login");
   }
 
   @Test
   public void remove_user() {
-    OrganizationDto organization = db.organizations().insert();
-    QProfileDto profile = db.qualityProfiles().insert(organization, p -> p.setLanguage(XOO));
+    OrganizationDto organization = db.organizations().getDefaultOrganization();
+    QProfileDto profile = db.qualityProfiles().insert(p -> p.setLanguage(XOO));
     UserDto user = db.users().insertUser();
     db.organizations().addMember(organization, user);
     db.qualityProfiles().addUserPermission(profile, user);
-    userSession.logIn().addPermission(OrganizationPermission.ADMINISTER_QUALITY_PROFILES, organization);
+    userSession.logIn().addPermission(GlobalPermission.ADMINISTER_QUALITY_PROFILES);
 
     TestResponse response = ws.newRequest()
       .setParam(PARAM_QUALITY_PROFILE, profile.getName())
       .setParam(PARAM_LANGUAGE, XOO)
       .setParam(PARAM_LOGIN, user.getLogin())
-      .setParam(PARAM_ORGANIZATION, organization.getKey())
       .execute();
 
     assertThat(response.getStatus()).isEqualTo(204);
@@ -93,18 +91,17 @@ public class RemoveUserActionTest {
 
   @Test
   public void does_nothing_when_user_cannot_edit_profile() {
-    OrganizationDto organization = db.organizations().insert();
-    QProfileDto profile = db.qualityProfiles().insert(organization, p -> p.setLanguage(XOO));
+    OrganizationDto organization = db.organizations().getDefaultOrganization();
+    QProfileDto profile = db.qualityProfiles().insert(p -> p.setLanguage(XOO));
     UserDto user = db.users().insertUser();
     db.organizations().addMember(organization, user);
     assertThat(db.getDbClient().qProfileEditUsersDao().exists(db.getSession(), profile, user)).isFalse();
-    userSession.logIn().addPermission(OrganizationPermission.ADMINISTER_QUALITY_PROFILES, organization);
+    userSession.logIn().addPermission(GlobalPermission.ADMINISTER_QUALITY_PROFILES);
 
     ws.newRequest()
       .setParam(PARAM_QUALITY_PROFILE, profile.getName())
       .setParam(PARAM_LANGUAGE, XOO)
       .setParam(PARAM_LOGIN, user.getLogin())
-      .setParam(PARAM_ORGANIZATION, organization.getKey())
       .execute();
 
     assertThat(db.getDbClient().qProfileEditUsersDao().exists(db.getSession(), profile, user)).isFalse();
@@ -112,18 +109,17 @@ public class RemoveUserActionTest {
 
   @Test
   public void qp_administers_can_remove_user() {
-    OrganizationDto organization = db.organizations().insert();
-    QProfileDto profile = db.qualityProfiles().insert(organization, p -> p.setLanguage(XOO));
+    OrganizationDto organization = db.organizations().getDefaultOrganization();
+    QProfileDto profile = db.qualityProfiles().insert(p -> p.setLanguage(XOO));
     UserDto user = db.users().insertUser();
     db.organizations().addMember(organization, user);
     db.qualityProfiles().addUserPermission(profile, user);
-    userSession.logIn().addPermission(OrganizationPermission.ADMINISTER_QUALITY_PROFILES, organization);
+    userSession.logIn().addPermission(GlobalPermission.ADMINISTER_QUALITY_PROFILES);
 
     ws.newRequest()
       .setParam(PARAM_QUALITY_PROFILE, profile.getName())
       .setParam(PARAM_LANGUAGE, XOO)
       .setParam(PARAM_LOGIN, user.getLogin())
-      .setParam(PARAM_ORGANIZATION, organization.getKey())
       .execute();
 
     assertThat(db.getDbClient().qProfileEditUsersDao().exists(db.getSession(), profile, user)).isFalse();
@@ -131,8 +127,8 @@ public class RemoveUserActionTest {
 
   @Test
   public void qp_editors_can_remove_user() {
-    OrganizationDto organization = db.organizations().insert();
-    QProfileDto profile = db.qualityProfiles().insert(organization, p -> p.setLanguage(XOO));
+    OrganizationDto organization = db.organizations().getDefaultOrganization();
+    QProfileDto profile = db.qualityProfiles().insert(p -> p.setLanguage(XOO));
     UserDto user = db.users().insertUser();
     db.organizations().addMember(organization, user);
     db.qualityProfiles().addUserPermission(profile, user);
@@ -144,7 +140,6 @@ public class RemoveUserActionTest {
       .setParam(PARAM_QUALITY_PROFILE, profile.getName())
       .setParam(PARAM_LANGUAGE, XOO)
       .setParam(PARAM_LOGIN, user.getLogin())
-      .setParam(PARAM_ORGANIZATION, organization.getKey())
       .execute();
 
     assertThat(db.getDbClient().qProfileEditUsersDao().exists(db.getSession(), profile, user)).isFalse();
@@ -153,16 +148,16 @@ public class RemoveUserActionTest {
   @Test
   public void uses_default_organization_when_no_organization() {
     OrganizationDto organization = db.getDefaultOrganization();
-    QProfileDto profile = db.qualityProfiles().insert(organization, p -> p.setLanguage(XOO));
+    QProfileDto profile = db.qualityProfiles().insert(p -> p.setLanguage(XOO));
     UserDto user = db.users().insertUser();
     db.organizations().addMember(organization, user);
     db.qualityProfiles().addUserPermission(profile, user);
-    userSession.logIn().addPermission(ADMINISTER_QUALITY_PROFILES, organization);
+    userSession.logIn().addPermission(ADMINISTER_QUALITY_PROFILES);
 
     ws.newRequest()
       .setParam(PARAM_QUALITY_PROFILE, profile.getName())
       .setParam(PARAM_LANGUAGE, XOO)
-      .setParam(PARAM_LOGIN, user.getLogin() )
+      .setParam(PARAM_LOGIN, user.getLogin())
       .execute();
 
     assertThat(db.getDbClient().qProfileEditUsersDao().exists(db.getSession(), profile, user)).isFalse();
@@ -170,9 +165,8 @@ public class RemoveUserActionTest {
 
   @Test
   public void fail_when_user_does_not_exist() {
-    OrganizationDto organization = db.organizations().insert();
-    QProfileDto profile = db.qualityProfiles().insert(organization, p -> p.setLanguage(XOO));
-    userSession.logIn().addPermission(OrganizationPermission.ADMINISTER_QUALITY_PROFILES, organization);
+    QProfileDto profile = db.qualityProfiles().insert(p -> p.setLanguage(XOO));
+    userSession.logIn().addPermission(GlobalPermission.ADMINISTER_QUALITY_PROFILES);
 
     expectedException.expect(NotFoundException.class);
     expectedException.expectMessage("User with login 'unknown' is not found");
@@ -181,95 +175,51 @@ public class RemoveUserActionTest {
       .setParam(PARAM_QUALITY_PROFILE, profile.getName())
       .setParam(PARAM_LANGUAGE, XOO)
       .setParam(PARAM_LOGIN, "unknown")
-      .setParam(PARAM_ORGANIZATION, organization.getKey())
       .execute();
   }
 
   @Test
   public void fail_when_qprofile_does_not_exist() {
-    OrganizationDto organization = db.organizations().insert();
+    OrganizationDto organization = db.organizations().getDefaultOrganization();
     UserDto user = db.users().insertUser();
     db.organizations().addMember(organization, user);
-    userSession.logIn().addPermission(OrganizationPermission.ADMINISTER_QUALITY_PROFILES, organization);
+    userSession.logIn().addPermission(GlobalPermission.ADMINISTER_QUALITY_PROFILES);
 
     expectedException.expect(NotFoundException.class);
-    expectedException.expectMessage(format("Quality Profile for language 'xoo' and name 'unknown' does not exist in organization '%s'", organization.getKey()));
+    expectedException.expectMessage("Quality Profile for language 'xoo' and name 'unknown' does not exist");
 
     ws.newRequest()
       .setParam(PARAM_QUALITY_PROFILE, "unknown")
       .setParam(PARAM_LANGUAGE, XOO)
       .setParam(PARAM_LOGIN, user.getLogin())
-      .setParam(PARAM_ORGANIZATION, organization.getKey())
-      .execute();
-  }
-
-  @Test
-  public void fail_when_qprofile_does_not_belong_to_organization() {
-    OrganizationDto organization = db.organizations().insert();
-    UserDto user = db.users().insertUser();
-    db.organizations().addMember(organization, user);
-    OrganizationDto anotherOrganization = db.organizations().insert();
-    QProfileDto profile = db.qualityProfiles().insert(anotherOrganization, p -> p.setLanguage(XOO));
-    userSession.logIn().addPermission(OrganizationPermission.ADMINISTER_QUALITY_PROFILES, organization);
-
-    expectedException.expect(NotFoundException.class);
-    expectedException.expectMessage(format("Quality Profile for language 'xoo' and name '%s' does not exist in organization '%s'", profile.getName(), organization.getKey()));
-
-    ws.newRequest()
-      .setParam(PARAM_QUALITY_PROFILE, profile.getName())
-      .setParam(PARAM_LANGUAGE, XOO)
-      .setParam(PARAM_LOGIN, user.getLogin())
-      .setParam(PARAM_ORGANIZATION, organization.getKey())
       .execute();
   }
 
   @Test
   public void fail_when_wrong_language() {
-    OrganizationDto organization = db.organizations().insert();
-    QProfileDto profile = db.qualityProfiles().insert(organization, p -> p.setLanguage("unknown"));
+    OrganizationDto organization = db.organizations().getDefaultOrganization();
+    QProfileDto profile = db.qualityProfiles().insert(p -> p.setLanguage("unknown"));
     UserDto user = db.users().insertUser();
     db.organizations().addMember(organization, user);
-    userSession.logIn().addPermission(OrganizationPermission.ADMINISTER_QUALITY_PROFILES, organization);
+    userSession.logIn().addPermission(GlobalPermission.ADMINISTER_QUALITY_PROFILES);
 
     expectedException.expect(NotFoundException.class);
-    expectedException.expectMessage(format("Quality Profile for language 'xoo' and name '%s' does not exist in organization '%s'", profile.getName(), organization.getKey()));
+    expectedException.expectMessage(format("Quality Profile for language 'xoo' and name '%s' does not exist", profile.getName()));
 
     ws.newRequest()
       .setParam(PARAM_QUALITY_PROFILE, profile.getName())
       .setParam(PARAM_LANGUAGE, XOO)
       .setParam(PARAM_LOGIN, user.getLogin())
-      .setParam(PARAM_ORGANIZATION, organization.getKey())
-      .execute();
-  }
-
-  @Test
-  public void fail_when_user_is_not_member_of_organization() {
-    OrganizationDto organization = db.organizations().insert();
-    OrganizationDto anotherOrganization = db.organizations().insert();
-    UserDto user = db.users().insertUser();
-    db.organizations().addMember(anotherOrganization, user);
-    QProfileDto profile = db.qualityProfiles().insert(organization, p -> p.setLanguage(XOO));
-    userSession.logIn().addPermission(OrganizationPermission.ADMINISTER_QUALITY_PROFILES, organization);
-
-    expectedException.expect(IllegalArgumentException.class);
-    expectedException.expectMessage(format("User '%s' is not member of organization '%s'", user.getLogin(), organization.getKey()));
-
-    ws.newRequest()
-      .setParam(PARAM_QUALITY_PROFILE, profile.getName())
-      .setParam(PARAM_LANGUAGE, XOO)
-      .setParam(PARAM_LOGIN, user.getLogin())
-      .setParam(PARAM_ORGANIZATION, organization.getKey())
       .execute();
   }
 
   @Test
   public void fail_when_qp_is_built_in() {
-    OrganizationDto organization = db.organizations().insert();
+    OrganizationDto organization = db.organizations().getDefaultOrganization();
     UserDto user = db.users().insertUser();
     db.organizations().addMember(organization, user);
-    QProfileDto profile = db.qualityProfiles().insert(organization, p -> p.setLanguage(XOO).setIsBuiltIn(true));
-    userSession.logIn().addPermission(OrganizationPermission.ADMINISTER_QUALITY_PROFILES, organization);
-
+    QProfileDto profile = db.qualityProfiles().insert(p -> p.setLanguage(XOO).setIsBuiltIn(true));
+    userSession.logIn().addPermission(GlobalPermission.ADMINISTER_QUALITY_PROFILES);
     expectedException.expect(BadRequestException.class);
     expectedException.expectMessage(String.format("Operation forbidden for built-in Quality Profile '%s' with language 'xoo'", profile.getName()));
 
@@ -277,17 +227,16 @@ public class RemoveUserActionTest {
       .setParam(PARAM_QUALITY_PROFILE, profile.getName())
       .setParam(PARAM_LANGUAGE, XOO)
       .setParam(PARAM_LOGIN, user.getLogin())
-      .setParam(PARAM_ORGANIZATION, organization.getKey())
       .execute();
   }
 
   @Test
   public void fail_when_not_enough_permission() {
-    OrganizationDto organization = db.organizations().insert();
-    QProfileDto profile = db.qualityProfiles().insert(organization, p -> p.setLanguage(XOO));
+    OrganizationDto organization = db.organizations().getDefaultOrganization();
+    QProfileDto profile = db.qualityProfiles().insert(p -> p.setLanguage(XOO));
     UserDto user = db.users().insertUser();
     db.organizations().addMember(organization, user);
-    userSession.logIn(db.users().insertUser()).addPermission(OrganizationPermission.ADMINISTER_QUALITY_GATES, organization);
+    userSession.logIn(db.users().insertUser()).addPermission(GlobalPermission.ADMINISTER_QUALITY_GATES);
 
     expectedException.expect(ForbiddenException.class);
 
@@ -295,7 +244,6 @@ public class RemoveUserActionTest {
       .setParam(PARAM_QUALITY_PROFILE, profile.getName())
       .setParam(PARAM_LANGUAGE, XOO)
       .setParam(PARAM_LOGIN, user.getLogin())
-      .setParam(PARAM_ORGANIZATION, organization.getKey())
       .execute();
   }
 }

@@ -19,13 +19,13 @@
  */
 import * as React from 'react';
 import { IndexLink, Link } from 'react-router';
+import DateFromNow from 'sonar-ui-common/components/intl/DateFromNow';
 import { translate } from 'sonar-ui-common/helpers/l10n';
 import BuiltInQualityProfileBadge from '../components/BuiltInQualityProfileBadge';
 import ProfileActions from '../components/ProfileActions';
-import ProfileDate from '../components/ProfileDate';
 import ProfileLink from '../components/ProfileLink';
 import { Profile } from '../types';
-import { getProfileChangelogPath, getProfilesForLanguagePath, getProfilesPath } from '../utils';
+import { getProfileChangelogPath, getProfilesForLanguagePath, PROFILE_PATH } from '../utils';
 
 interface Props {
   profile: Profile;
@@ -40,23 +40,17 @@ export default class ProfileHeader extends React.PureComponent<Props> {
     return (
       <header className="page-header quality-profile-header">
         <div className="note spacer-bottom">
-          <IndexLink className="text-muted" to={getProfilesPath(organization)}>
+          <IndexLink className="text-muted" to={PROFILE_PATH}>
             {translate('quality_profiles.page')}
           </IndexLink>
           {' / '}
-          <Link
-            className="text-muted"
-            to={getProfilesForLanguagePath(profile.language, organization)}>
+          <Link className="text-muted" to={getProfilesForLanguagePath(profile.language)}>
             {profile.languageName}
           </Link>
         </div>
 
         <h1 className="page-title">
-          <ProfileLink
-            className="link-base-color"
-            language={profile.language}
-            name={profile.name}
-            organization={organization}>
+          <ProfileLink className="link-base-color" language={profile.language} name={profile.name}>
             <span>{profile.name}</span>
           </ProfileLink>
           {profile.isBuiltIn && (
@@ -67,15 +61,13 @@ export default class ProfileHeader extends React.PureComponent<Props> {
         <div className="pull-right">
           <ul className="list-inline" style={{ lineHeight: '24px' }}>
             <li className="small spacer-right">
-              {translate('quality_profiles.updated_')} <ProfileDate date={profile.rulesUpdatedAt} />
+              {translate('quality_profiles.updated_')} <DateFromNow date={profile.rulesUpdatedAt} />
             </li>
             <li className="small big-spacer-right">
-              {translate('quality_profiles.used_')} <ProfileDate date={profile.lastUsed} />
+              {translate('quality_profiles.used_')} <DateFromNow date={profile.lastUsed} />
             </li>
             <li>
-              <Link
-                className="button"
-                to={getProfileChangelogPath(profile.name, profile.language, organization)}>
+              <Link className="button" to={getProfileChangelogPath(profile.name, profile.language)}>
                 {translate('changelog')}
               </Link>
             </li>
@@ -92,9 +84,7 @@ export default class ProfileHeader extends React.PureComponent<Props> {
 
         {profile.isBuiltIn && (
           <div className="page-description">
-            {translate('quality_profiles.built_in.description.1')}
-            <br />
-            {translate('quality_profiles.built_in.description.2')}
+            {translate('quality_profiles.built_in.description')}
           </div>
         )}
       </header>

@@ -53,6 +53,7 @@ public class CorePropertyDefinitions {
     defs.addAll(PurgeProperties.all());
     defs.addAll(EmailSettings.definitions());
     defs.addAll(ScannerProperties.all());
+    defs.addAll(SvnProperties.all());
 
     defs.addAll(asList(
       PropertyDefinition.builder(CoreProperties.MODULE_LEVEL_ARCHIVED_SETTINGS)
@@ -131,6 +132,16 @@ public class CorePropertyDefinitions {
         .build(),
 
       // ISSUES
+      PropertyDefinition.builder(CoreProperties.DEVELOPER_AGGREGATED_INFO_DISABLED)
+        .name("Disable developer aggregated information")
+        .description("Don't show issue facets aggregating information per developer")
+        .category(CoreProperties.CATEGORY_GENERAL)
+        .subCategory(CoreProperties.SUBCATEGORY_ISSUES)
+        .onQualifiers(Qualifiers.PROJECT)
+        .type(BOOLEAN)
+        .defaultValue(Boolean.toString(false))
+        .build(),
+
       PropertyDefinition.builder(CoreProperties.DEFAULT_ISSUE_ASSIGNEE)
         .name("Default Assignee")
         .description("New issues will be assigned to this user each time it is not possible to determine the user who is the author of the issue.")

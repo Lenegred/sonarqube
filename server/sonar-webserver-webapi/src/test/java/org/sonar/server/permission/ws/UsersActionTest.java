@@ -26,9 +26,7 @@ import org.sonar.api.server.ws.WebService.Param;
 import org.sonar.api.server.ws.WebService.SelectionMode;
 import org.sonar.api.web.UserRole;
 import org.sonar.db.component.ComponentDto;
-import org.sonar.db.component.ComponentTesting;
 import org.sonar.db.component.ResourceTypesRule;
-import org.sonar.db.organization.OrganizationDto;
 import org.sonar.db.user.UserDto;
 import org.sonar.server.exceptions.BadRequestException;
 import org.sonar.server.exceptions.ForbiddenException;
@@ -47,15 +45,13 @@ import static org.sonar.api.server.ws.WebService.Param.PAGE_SIZE;
 import static org.sonar.api.server.ws.WebService.Param.TEXT_QUERY;
 import static org.sonar.api.web.UserRole.ISSUE_ADMIN;
 import static org.sonar.core.permission.GlobalPermissions.SYSTEM_ADMIN;
-import static org.sonar.db.component.ComponentTesting.newPrivateProjectDto;
-import static org.sonar.db.permission.OrganizationPermission.ADMINISTER;
-import static org.sonar.db.permission.OrganizationPermission.ADMINISTER_QUALITY_GATES;
-import static org.sonar.db.permission.OrganizationPermission.ADMINISTER_QUALITY_PROFILES;
-import static org.sonar.db.permission.OrganizationPermission.PROVISION_PROJECTS;
-import static org.sonar.db.permission.OrganizationPermission.SCAN;
+import static org.sonar.db.permission.GlobalPermission.ADMINISTER;
+import static org.sonar.db.permission.GlobalPermission.ADMINISTER_QUALITY_GATES;
+import static org.sonar.db.permission.GlobalPermission.ADMINISTER_QUALITY_PROFILES;
+import static org.sonar.db.permission.GlobalPermission.PROVISION_PROJECTS;
+import static org.sonar.db.permission.GlobalPermission.SCAN;
 import static org.sonar.db.user.UserTesting.newUserDto;
 import static org.sonar.test.JsonAssert.assertJson;
-import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_ORGANIZATION;
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_PERMISSION;
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_PROJECT_ID;
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_PROJECT_KEY;
@@ -76,17 +72,14 @@ public class UsersActionTest extends BasePermissionWsTest<UsersAction> {
   @Test
   public void search_for_users_with_response_example() {
     UserDto user1 = db.users().insertUser(newUserDto().setLogin("admin").setName("Administrator").setEmail("admin@admin.com"));
-    db.organizations().addMember(db.getDefaultOrganization(), user1);
     UserDto user2 = db.users().insertUser(newUserDto().setLogin("adam.west").setName("Adam West").setEmail("adamwest@adamwest.com"));
-    db.organizations().addMember(db.getDefaultOrganization(), user2);
     UserDto user3 = db.users().insertUser(newUserDto().setLogin("george.orwell").setName("George Orwell").setEmail("george.orwell@1984.net"));
-    db.organizations().addMember(db.getDefaultOrganization(), user3);
     db.users().insertPermissionOnUser(user1, ADMINISTER_QUALITY_PROFILES);
     db.users().insertPermissionOnUser(user1, ADMINISTER);
     db.users().insertPermissionOnUser(user1, ADMINISTER_QUALITY_GATES);
     db.users().insertPermissionOnUser(user3, SCAN);
 
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
     String result = newRequest().execute().getInput();
 
     assertJson(result).withStrictArrayOrder().isSimilarTo(getClass().getResource("users-example.json"));
@@ -96,7 +89,7 @@ public class UsersActionTest extends BasePermissionWsTest<UsersAction> {
   public void search_for_users_with_one_permission() {
     insertUsersHavingGlobalPermissions();
 
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
     String result = newRequest().setParam("permission", "scan").execute().getInput();
 
     assertJson(result).withStrictArrayOrder().isSimilarTo(getClass().getResource("UsersActionTest/users.json"));
@@ -105,20 +98,17 @@ public class UsersActionTest extends BasePermissionWsTest<UsersAction> {
   @Test
   public void search_for_users_with_permission_on_project() {
     // User has permission on project
-    ComponentDto project = db.components().insertComponent(ComponentTesting.newPrivateProjectDto(db.getDefaultOrganization()));
+    ComponentDto project = db.components().insertPrivateProject();
     UserDto user = db.users().insertUser(newUserDto());
-    db.organizations().addMember(db.getDefaultOrganization(), user);
     db.users().insertProjectPermissionOnUser(user, ISSUE_ADMIN, project);
 
     // User has permission on another project
-    ComponentDto anotherProject = db.components().insertComponent(ComponentTesting.newPrivateProjectDto(db.getDefaultOrganization()));
+    ComponentDto anotherProject = db.components().insertPrivateProject();
     UserDto userHavePermissionOnAnotherProject = db.users().insertUser(newUserDto());
-    db.organizations().addMember(db.getDefaultOrganization(), userHavePermissionOnAnotherProject);
     db.users().insertProjectPermissionOnUser(userHavePermissionOnAnotherProject, ISSUE_ADMIN, anotherProject);
 
     // User has no permission
     UserDto withoutPermission = db.users().insertUser(newUserDto());
-    db.organizations().addMember(db.getDefaultOrganization(), withoutPermission);
 
     userSession.logIn().addProjectPermission(SYSTEM_ADMIN, project);
     String result = newRequest()
@@ -135,18 +125,15 @@ public class UsersActionTest extends BasePermissionWsTest<UsersAction> {
   @Test
   public void search_also_for_users_without_permission_when_filtering_name() {
     // User with permission on project
-    ComponentDto project = db.components().insertComponent(ComponentTesting.newPrivateProjectDto(db.organizations().insert()));
+    ComponentDto project = db.components().insertPrivateProject();
     UserDto user = db.users().insertUser(newUserDto("with-permission-login", "with-permission-name", "with-permission-email"));
-    db.organizations().addMember(db.getDefaultOrganization(), user);
     db.users().insertProjectPermissionOnUser(user, ISSUE_ADMIN, project);
 
     // User without permission
     UserDto withoutPermission = db.users().insertUser(newUserDto("without-permission-login", "without-permission-name", "without-permission-email"));
-    db.organizations().addMember(db.getDefaultOrganization(), withoutPermission);
     UserDto anotherUser = db.users().insertUser(newUserDto("another-user", "another-user", "another-user"));
-    db.organizations().addMember(db.getDefaultOrganization(), anotherUser);
 
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
     String result = newRequest()
       .setParam(PARAM_PROJECT_ID, project.uuid())
       .setParam(TEXT_QUERY, "with")
@@ -159,18 +146,15 @@ public class UsersActionTest extends BasePermissionWsTest<UsersAction> {
   @Test
   public void search_also_for_users_without_permission_when_filtering_email() {
     // User with permission on project
-    ComponentDto project = db.components().insertComponent(ComponentTesting.newPrivateProjectDto(db.organizations().insert()));
+    ComponentDto project = db.components().insertPrivateProject();
     UserDto user = db.users().insertUser(newUserDto("with-permission-login", "with-permission-name", "with-permission-email"));
-    db.organizations().addMember(db.getDefaultOrganization(), user);
     db.users().insertProjectPermissionOnUser(user, ISSUE_ADMIN, project);
 
     // User without permission
     UserDto withoutPermission = db.users().insertUser(newUserDto("without-permission-login", "without-permission-name", "without-permission-email"));
-    db.organizations().addMember(db.getDefaultOrganization(), withoutPermission);
     UserDto anotherUser = db.users().insertUser(newUserDto("another-user", "another-user", "another-user"));
-    db.organizations().addMember(db.getDefaultOrganization(), anotherUser);
 
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
     String result = newRequest().setParam(PARAM_PROJECT_ID, project.uuid()).setParam(TEXT_QUERY, "email").execute().getInput();
 
     assertThat(result).contains(user.getLogin(), withoutPermission.getLogin()).doesNotContain(anotherUser.getLogin());
@@ -179,18 +163,15 @@ public class UsersActionTest extends BasePermissionWsTest<UsersAction> {
   @Test
   public void search_also_for_users_without_permission_when_filtering_login() {
     // User with permission on project
-    ComponentDto project = db.components().insertComponent(ComponentTesting.newPrivateProjectDto(db.organizations().insert()));
+    ComponentDto project = db.components().insertPrivateProject();
     UserDto user = db.users().insertUser(newUserDto("with-permission-login", "with-permission-name", "with-permission-email"));
-    db.organizations().addMember(db.getDefaultOrganization(), user);
     db.users().insertProjectPermissionOnUser(user, ISSUE_ADMIN, project);
 
     // User without permission
     UserDto withoutPermission = db.users().insertUser(newUserDto("without-permission-login", "without-permission-name", "without-permission-email"));
-    db.organizations().addMember(db.getDefaultOrganization(), withoutPermission);
     UserDto anotherUser = db.users().insertUser(newUserDto("another-user", "another-user", "another-user"));
-    db.organizations().addMember(db.getDefaultOrganization(), anotherUser);
 
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
     String result = newRequest().setParam(PARAM_PROJECT_ID, project.uuid()).setParam(TEXT_QUERY, "login").execute().getInput();
 
     assertThat(result).contains(user.getLogin(), withoutPermission.getLogin()).doesNotContain(anotherUser.getLogin());
@@ -200,7 +181,7 @@ public class UsersActionTest extends BasePermissionWsTest<UsersAction> {
   public void search_for_users_with_query_as_a_parameter() {
     insertUsersHavingGlobalPermissions();
 
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
     String result = newRequest()
       .setParam("permission", "scan")
       .setParam(TEXT_QUERY, "ame-1")
@@ -216,7 +197,7 @@ public class UsersActionTest extends BasePermissionWsTest<UsersAction> {
   public void search_for_users_with_select_as_a_parameter() {
     insertUsersHavingGlobalPermissions();
 
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
     String result = newRequest()
       .execute()
       .getInput();
@@ -228,11 +209,10 @@ public class UsersActionTest extends BasePermissionWsTest<UsersAction> {
   public void search_for_users_is_paginated() {
     for (int i = 9; i >= 0; i--) {
       UserDto user = db.users().insertUser(newUserDto().setName("user-" + i));
-      db.organizations().addMember(db.getDefaultOrganization(), user);
       db.users().insertPermissionOnUser(user, ADMINISTER);
       db.users().insertPermissionOnUser(user, ADMINISTER_QUALITY_GATES);
     }
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
 
     assertJson(newRequest().setParam(PAGE, "1").setParam(PAGE_SIZE, "2").execute().getInput()).withStrictArrayOrder().isSimilarTo("{\n" +
       "  \"paging\": {\n" +
@@ -268,10 +248,9 @@ public class UsersActionTest extends BasePermissionWsTest<UsersAction> {
 
   @Test
   public void return_more_than_20_permissions() {
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
     for (int i = 0; i < 30; i++) {
       UserDto user = db.users().insertUser(newUserDto().setLogin("user-" + i));
-      db.organizations().addMember(db.getDefaultOrganization(), user);
       db.users().insertPermissionOnUser(user, SCAN);
       db.users().insertPermissionOnUser(user, PROVISION_PROJECTS);
     }
@@ -286,7 +265,7 @@ public class UsersActionTest extends BasePermissionWsTest<UsersAction> {
 
   @Test
   public void fail_if_project_permission_without_project() {
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
 
     expectedException.expect(BadRequestException.class);
 
@@ -320,22 +299,22 @@ public class UsersActionTest extends BasePermissionWsTest<UsersAction> {
 
   @Test
   public void fail_if_project_uuid_and_project_key_are_provided() {
-    db.components().insertComponent(newPrivateProjectDto(db.organizations().insert(), "project-uuid").setDbKey("project-key"));
-    loginAsAdmin(db.getDefaultOrganization());
+    ComponentDto project = db.components().insertPrivateProject();
+    loginAsAdmin();
 
     expectedException.expect(BadRequestException.class);
     expectedException.expectMessage("Project id or project key can be provided, not both.");
 
     newRequest()
       .setParam(PARAM_PERMISSION, SYSTEM_ADMIN)
-      .setParam(PARAM_PROJECT_ID, "project-uuid")
-      .setParam(PARAM_PROJECT_KEY, "project-key")
+      .setParam(PARAM_PROJECT_ID, project.uuid())
+      .setParam(PARAM_PROJECT_KEY, project.getKey())
       .execute();
   }
 
   @Test
   public void fail_if_search_query_is_too_short() {
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
 
     expectedException.expect(IllegalArgumentException.class);
     expectedException.expectMessage("'q' length (2) is shorter than the minimum authorized (3)");
@@ -345,9 +324,8 @@ public class UsersActionTest extends BasePermissionWsTest<UsersAction> {
 
   @Test
   public void fail_when_using_branch_db_key() throws Exception {
-    OrganizationDto organization = db.organizations().insert();
     UserDto user = db.users().insertUser(newUserDto());
-    ComponentDto project = db.components().insertPublicProject(organization);
+    ComponentDto project = db.components().insertPublicProject();
     ComponentDto branch = db.components().insertProjectBranch(project);
     db.users().insertProjectPermissionOnUser(user, ISSUE_ADMIN, project);
     userSession.logIn().addProjectPermission(UserRole.ADMIN, project);
@@ -356,7 +334,6 @@ public class UsersActionTest extends BasePermissionWsTest<UsersAction> {
     expectedException.expectMessage(format("Project key '%s' not found", branch.getDbKey()));
 
     newRequest()
-      .setParam(PARAM_ORGANIZATION, organization.getKey())
       .setParam(PARAM_PROJECT_KEY, branch.getDbKey())
       .setParam(PARAM_USER_LOGIN, user.getLogin())
       .setParam(PARAM_PERMISSION, SYSTEM_ADMIN)
@@ -365,9 +342,8 @@ public class UsersActionTest extends BasePermissionWsTest<UsersAction> {
 
   @Test
   public void fail_when_using_branch_uuid() {
-    OrganizationDto organization = db.organizations().insert();
     UserDto user = db.users().insertUser(newUserDto());
-    ComponentDto project = db.components().insertPublicProject(organization);
+    ComponentDto project = db.components().insertPublicProject();
     ComponentDto branch = db.components().insertProjectBranch(project);
     db.users().insertProjectPermissionOnUser(user, ISSUE_ADMIN, project);
     userSession.logIn().addProjectPermission(UserRole.ADMIN, project);
@@ -376,7 +352,6 @@ public class UsersActionTest extends BasePermissionWsTest<UsersAction> {
     expectedException.expectMessage(format("Project id '%s' not found", branch.uuid()));
 
     newRequest()
-      .setParam(PARAM_ORGANIZATION, organization.getKey())
       .setParam(PARAM_PROJECT_ID, branch.uuid())
       .setParam(PARAM_USER_LOGIN, user.getLogin())
       .setParam(PARAM_PERMISSION, SYSTEM_ADMIN)
@@ -385,11 +360,8 @@ public class UsersActionTest extends BasePermissionWsTest<UsersAction> {
 
   private void insertUsersHavingGlobalPermissions() {
     UserDto user1 = db.users().insertUser(newUserDto("login-1", "name-1", "email-1"));
-    db.organizations().addMember(db.getDefaultOrganization(), user1);
     UserDto user2 = db.users().insertUser(newUserDto("login-2", "name-2", "email-2"));
-    db.organizations().addMember(db.getDefaultOrganization(), user2);
     UserDto user3 = db.users().insertUser(newUserDto("login-3", "name-3", "email-3"));
-    db.organizations().addMember(db.getDefaultOrganization(), user3);
     db.users().insertPermissionOnUser(user1, SCAN);
     db.users().insertPermissionOnUser(user2, SCAN);
     db.users().insertPermissionOnUser(user3, ADMINISTER);

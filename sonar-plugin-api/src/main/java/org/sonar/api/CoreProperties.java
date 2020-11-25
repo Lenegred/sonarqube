@@ -309,6 +309,12 @@ public interface CoreProperties {
   String SCAN_TASK = "scan";
 
   /**
+   * @since 3.6
+   * Removed in 8.4 by mistake and reintroduced in 8.5
+   */
+  String PROFILING_LOG_PROPERTY = "sonar.showProfiling";
+
+  /**
    * @since 4.0
    */
   String WORKING_DIRECTORY = "sonar.working.directory";
@@ -385,6 +391,11 @@ public interface CoreProperties {
    * @since 5.1
    */
   String DEFAULT_ISSUE_ASSIGNEE = "sonar.issues.defaultAssigneeLogin";
+
+  /**
+   * @since 8.5
+   */
+  String DEVELOPER_AGGREGATED_INFO_DISABLED = "sonar.developerAggregatedInfo.disabled";
 
   /**
    * @since 7.6

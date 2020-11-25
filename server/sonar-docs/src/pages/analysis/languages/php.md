@@ -3,9 +3,6 @@ title: PHP
 url: /analysis/languages/php/
 ---
 
-<!-- static -->
-<!-- update_center:php -->
-<!-- /static -->
 
 
 ## Language-Specific Properties
@@ -14,7 +11,7 @@ Discover and update the PHP-specific [properties](/analysis/analysis-parameters/
 
 ## Analyze php.ini Files
 
-The PHP analyzer can analyze `php.ini` files with some specific rules (if these rules are activated in your quality profile). `php.ini` files must be part of the project you are analyzing, meaning the `php.ini` files have to be inside the directories listed in `sonar.sources`. 
+The PHP analyzer can analyze `php.ini` files with some specific rules (if these rules are activated in your Quality Profile). `php.ini` files must be part of the project you are analyzing, meaning the `php.ini` files have to be inside the directories listed in `sonar.sources`. 
 Rules targeting `php.ini` files can be quickly identified through the ["php-ini"](https://rules.sonarsource.com/php/tag/php-ini) tag set on them.
 
 <!-- sonarqube -->

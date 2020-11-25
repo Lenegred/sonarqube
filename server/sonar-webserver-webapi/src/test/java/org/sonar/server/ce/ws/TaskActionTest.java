@@ -38,10 +38,11 @@ import org.sonar.db.ce.CeActivityDto;
 import org.sonar.db.ce.CeQueueDto;
 import org.sonar.db.ce.CeTaskCharacteristicDto;
 import org.sonar.db.ce.CeTaskMessageDto;
+import org.sonar.db.ce.CeTaskMessageType;
 import org.sonar.db.ce.CeTaskTypes;
 import org.sonar.db.component.ComponentDto;
 import org.sonar.db.organization.OrganizationDto;
-import org.sonar.db.permission.OrganizationPermission;
+import org.sonar.db.permission.GlobalPermission;
 import org.sonar.db.user.UserDto;
 import org.sonar.server.exceptions.ForbiddenException;
 import org.sonar.server.exceptions.NotFoundException;
@@ -56,7 +57,7 @@ import static org.sonar.core.permission.GlobalPermissions.SCAN_EXECUTION;
 import static org.sonar.db.ce.CeTaskCharacteristicDto.BRANCH_KEY;
 import static org.sonar.db.ce.CeTaskCharacteristicDto.BRANCH_TYPE_KEY;
 import static org.sonar.db.component.BranchType.BRANCH;
-import static org.sonar.db.permission.OrganizationPermission.SCAN;
+import static org.sonar.db.permission.GlobalPermission.SCAN;
 
 public class TaskActionTest {
 
@@ -74,9 +75,9 @@ public class TaskActionTest {
   private OrganizationDto organization;
   private ComponentDto privateProject;
   private ComponentDto publicProject;
-  private TaskFormatter formatter = new TaskFormatter(db.getDbClient(), System2.INSTANCE);
-  private TaskAction underTest = new TaskAction(db.getDbClient(), formatter, userSession);
-  private WsActionTester ws = new WsActionTester(underTest);
+  private final TaskFormatter formatter = new TaskFormatter(db.getDbClient(), System2.INSTANCE);
+  private final TaskAction underTest = new TaskAction(db.getDbClient(), formatter, userSession);
+  private final WsActionTester ws = new WsActionTester(underTest);
 
   @Before
   public void setUp() {
@@ -125,6 +126,7 @@ public class TaskActionTest {
           .setUuid("u_" + i)
           .setTaskUuid(queueDto.getUuid())
           .setMessage("m_" + i)
+          .setType(CeTaskMessageType.GENERIC)
           .setCreatedAt(queueDto.getUuid().hashCode() + i)));
     db.commit();
 
@@ -342,7 +344,7 @@ public class TaskActionTest {
   @Test
   public void get_project_queue_task_with_scan_permission_on_organization_but_not_on_project() {
     UserDto user = db.users().insertUser();
-    userSession.logIn(user).addPermission(SCAN, privateProject.getOrganizationUuid());
+    userSession.logIn(user).addPermission(SCAN);
     CeQueueDto task = createAndPersistQueueTask(privateProject, user);
 
     call(task.getUuid());
@@ -393,13 +395,13 @@ public class TaskActionTest {
     CeActivityDto task = createAndPersistArchivedTask(publicProject);
 
     expectedException.expect(ForbiddenException.class);
-    
+
     call(task.getUuid());
   }
 
   @Test
   public void get_project_archived_task_with_scan_permission_on_organization_but_not_on_project() {
-    userSession.logIn().addPermission(SCAN, privateProject.getOrganizationUuid());
+    userSession.logIn().addPermission(SCAN);
     CeActivityDto task = createAndPersistArchivedTask(privateProject);
 
     call(task.getUuid());
@@ -467,7 +469,7 @@ public class TaskActionTest {
 
   @Test
   public void get_warnings_on_private_project_archived_task_if_scan_on_organization() {
-    userSession.logIn().addPermission(OrganizationPermission.SCAN, organization);
+    userSession.logIn().addPermission(GlobalPermission.SCAN);
 
     getWarningsImpl(createAndPersistArchivedTask(privateProject));
   }
@@ -488,6 +490,7 @@ public class TaskActionTest {
       .setUuid(UuidFactoryFast.getInstance().create())
       .setTaskUuid(task.getUuid())
       .setMessage("msg_" + task.getUuid() + "_" + i)
+      .setType(CeTaskMessageType.GENERIC)
       .setCreatedAt(task.getUuid().hashCode() + i);
     db.getDbClient().ceTaskMessageDao().insert(db.getSession(), res);
     db.getSession().commit();

@@ -20,11 +20,17 @@
 package org.sonar.db.ce;
 
 import java.util.List;
+import java.util.Optional;
 import org.apache.ibatis.annotations.Param;
 
 public interface CeTaskMessageMapper {
   void insert(@Param("dto") CeTaskMessageDto dto);
 
+  Optional<CeTaskMessageDto> selectByUuid(@Param("uuid") String uuid);
+
   List<CeTaskMessageDto> selectByTask(@Param("taskUuid") String taskUuid);
 
+  List<CeTaskMessageDto> selectNonDismissedByUserAndTask(@Param("taskUuid") String taskUuid, @Param("userUuid") String userUuid);
+
+  void deleteByType(@Param("ceMessageType") String ceMessageType);
 }

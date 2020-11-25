@@ -72,6 +72,37 @@ public class AlmIntegrationsService extends BaseService {
 
   /**
    *
+   * This is a POST request.
+   * @see <a href="https://next.sonarqube.com/sonarqube/web_api/api/alm_integrations/import_gitlab_project">Further information about this action online (including a response example)</a>
+   * @since 8.5
+  */
+  public Projects.CreateWsResponse importGitLabProject(ImportGitLabProjectRequest request) {
+    return call(
+      new PostRequest(path("import_gitlab_project"))
+        .setParam("almSetting", request.getAlmSetting())
+        .setParam("gitlabProjectId", request.getGitlabProjectId())
+        .setMediaType(MediaTypes.JSON),
+      Projects.CreateWsResponse.parser());
+  }
+
+  /**
+   *
+   * This is part of the internal API.
+   * This is a GET request.
+   * @see <a href="https://next.sonarqube.com/sonarqube/web_api/api/alm_integrations/search_gitlab_repos">Further information about this action online (including a response example)</a>
+   * @since 8.5
+   */
+  public AlmIntegrations.SearchGitlabReposWsResponse searchGitlabRepos(SearchGitlabReposRequest request) {
+    return call(
+      new GetRequest(path("search_gitlab_repos"))
+        .setParam("almSetting", request.getAlmSetting())
+        .setParam("projectName", request.getProjectName())
+        .setMediaType(MediaTypes.JSON),
+      AlmIntegrations.SearchGitlabReposWsResponse.parser());
+  }
+
+  /**
+   *
    * This is part of the internal API.
    * This is a GET request.
    * @see <a href="https://next.sonarqube.com/sonarqube/web_api/api/alm_integrations/list_bitbucketserver_projects">Further information about this action online (including a response example)</a>

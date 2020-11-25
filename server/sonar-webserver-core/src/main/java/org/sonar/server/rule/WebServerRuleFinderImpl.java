@@ -28,7 +28,6 @@ import org.sonar.api.rules.Rule;
 import org.sonar.api.rules.RuleQuery;
 import org.sonar.db.DbClient;
 import org.sonar.db.rule.RuleDefinitionDto;
-import org.sonar.server.organization.DefaultOrganizationProvider;
 
 public class WebServerRuleFinderImpl implements WebServerRuleFinder {
   private final DbClient dbClient;
@@ -36,9 +35,9 @@ public class WebServerRuleFinderImpl implements WebServerRuleFinder {
   @VisibleForTesting
   ServerRuleFinder delegate;
 
-  public WebServerRuleFinderImpl(DbClient dbClient, DefaultOrganizationProvider defaultOrganizationProvider) {
+  public WebServerRuleFinderImpl(DbClient dbClient) {
     this.dbClient = dbClient;
-    this.defaultFinder = new DefaultRuleFinder(dbClient, defaultOrganizationProvider);
+    this.defaultFinder = new DefaultRuleFinder(dbClient);
     this.delegate = this.defaultFinder;
   }
 

@@ -69,7 +69,7 @@ export interface SearchQualityProfilesResponse {
 }
 
 export function searchQualityProfiles(
-  parameters: SearchQualityProfilesParameters
+  parameters?: SearchQualityProfilesParameters
 ): Promise<SearchQualityProfilesResponse> {
   return getJSON('/api/qualityprofiles/search', parameters).catch(throwGlobalError);
 }
@@ -340,7 +340,6 @@ export function bulkDeactivateRules(data: BulkActivateParameters) {
 
 export function activateRule(data: {
   key: string;
-  organization: string | undefined;
   params?: T.Dict<string>;
   reset?: boolean;
   rule: string;
@@ -351,10 +350,6 @@ export function activateRule(data: {
   return post('/api/qualityprofiles/activate_rule', { ...data, params }).catch(throwGlobalError);
 }
 
-export function deactivateRule(data: {
-  key: string;
-  organization: string | undefined;
-  rule: string;
-}) {
+export function deactivateRule(data: { key: string; rule: string }) {
   return post('/api/qualityprofiles/deactivate_rule', data).catch(throwGlobalError);
 }

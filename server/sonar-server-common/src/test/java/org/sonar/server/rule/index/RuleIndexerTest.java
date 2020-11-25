@@ -29,6 +29,8 @@ import java.util.Set;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import javax.annotation.Nullable;
+import org.elasticsearch.action.search.SearchRequest;
+import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -44,8 +46,8 @@ import org.sonar.db.organization.OrganizationDto;
 import org.sonar.db.rule.RuleDefinitionDto;
 import org.sonar.db.rule.RuleDto;
 import org.sonar.db.rule.RuleDto.Scope;
-import org.sonar.db.rule.RuleMetadataDto;
 import org.sonar.db.rule.RuleTesting;
+import org.sonar.server.es.EsClient;
 import org.sonar.server.es.EsTester;
 import org.sonar.server.security.SecurityStandards;
 import org.sonar.server.security.SecurityStandards.SQCategory;
@@ -53,14 +55,11 @@ import org.sonar.server.security.SecurityStandards.SQCategory;
 import static com.google.common.collect.Sets.newHashSet;
 import static java.lang.String.format;
 import static java.util.Collections.emptyList;
-import static java.util.Collections.emptySet;
 import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toSet;
 import static org.apache.commons.lang.RandomStringUtils.randomAlphabetic;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.elasticsearch.index.query.QueryBuilders.termQuery;
 import static org.sonar.server.rule.index.RuleIndexDefinition.TYPE_RULE;
-import static org.sonar.server.rule.index.RuleIndexDefinition.TYPE_RULE_EXTENSION;
 import static org.sonar.server.security.SecurityStandards.CWES_BY_SQ_CATEGORY;
 import static org.sonar.server.security.SecurityStandards.SQ_CATEGORY_KEYS_ORDERING;
 
@@ -130,50 +129,6 @@ public class RuleIndexerTest {
   }
 
   @Test
-  public void index_rule_extension_with_long_id() {
-    RuleDefinitionDto rule = dbTester.rules().insert(r -> r.setRuleKey(RuleTesting.randomRuleKeyOfMaximumLength()));
-    underTest.commitAndIndex(dbTester.getSession(), rule.getUuid());
-    OrganizationDto organization = dbTester.organizations().insert();
-    RuleMetadataDto metadata = RuleTesting.newRuleMetadata(rule, organization).setTags(ImmutableSet.of("bla"));
-    dbTester.getDbClient().ruleDao().insertOrUpdate(dbTester.getSession(), metadata);
-    underTest.commitAndIndex(dbTester.getSession(), rule.getUuid(), organization);
-
-    RuleExtensionDoc doc = new RuleExtensionDoc()
-      .setRuleUuid(rule.getUuid())
-      .setScope(RuleExtensionScope.organization(organization.getUuid()));
-    assertThat(
-      es.client()
-        .prepareSearch(TYPE_RULE_EXTENSION.getMainType())
-        .setQuery(termQuery("_id", doc.getId()))
-        .get()
-        .getHits()
-        .getHits()[0]
-          .getId()).isEqualTo(doc.getId());
-  }
-
-  @Test
-  public void delete_rule_extension_from_index_when_setting_rule_tags_to_empty() {
-    RuleDefinitionDto rule = dbTester.rules().insert(r -> r.setRuleKey(RuleTesting.randomRuleKeyOfMaximumLength()));
-    underTest.commitAndIndex(dbTester.getSession(), rule.getUuid());
-    OrganizationDto organization = dbTester.organizations().insert();
-    RuleMetadataDto metadata = RuleTesting.newRuleMetadata(rule, organization).setTags(ImmutableSet.of("bla"));
-    dbTester.getDbClient().ruleDao().insertOrUpdate(dbTester.getSession(), metadata);
-    underTest.commitAndIndex(dbTester.getSession(), rule.getUuid(), organization);
-
-    // index tags
-    RuleExtensionDoc doc = new RuleExtensionDoc()
-      .setRuleUuid(rule.getUuid())
-      .setScope(RuleExtensionScope.organization(organization.getUuid()));
-    assertThat(es.getIds(TYPE_RULE_EXTENSION)).contains(doc.getId());
-
-    // update db table "rules_metadata" with empty tags and delete tags from index
-    metadata = RuleTesting.newRuleMetadata(rule, organization).setTags(emptySet());
-    dbTester.getDbClient().ruleDao().insertOrUpdate(dbTester.getSession(), metadata);
-    underTest.commitAndIndex(dbTester.getSession(), rule.getUuid(), organization);
-    assertThat(es.getIds(TYPE_RULE_EXTENSION)).doesNotContain(doc.getId());
-  }
-
-  @Test
   public void index_long_rule_description() {
     String description = IntStream.range(0, 100000).map(i -> i % 100).mapToObj(Integer::toString).collect(joining(" "));
     RuleDefinitionDto rule = dbTester.rules().insert(r -> r.setDescription(description));
@@ -184,7 +139,7 @@ public class RuleIndexerTest {
 
   @Test
   @UseDataProvider("twoDifferentCategoriesButOTHERS")
-  public void log_a_warning_if_hotspot_rule_maps_to_multiple_SQCategories(SQCategory sqCategory1, SQCategory sqCategory2) {
+  public void log_debug_if_hotspot_rule_maps_to_multiple_SQCategories(SQCategory sqCategory1, SQCategory sqCategory2) {
     Set<String> standards = Stream.of(sqCategory1, sqCategory2)
       .flatMap(t -> CWES_BY_SQ_CATEGORY.get(t).stream().map(e -> "cwe:" + e))
       .collect(toSet());
@@ -194,10 +149,10 @@ public class RuleIndexerTest {
       .setSecurityStandards(standards)
       .setDescription(VALID_HOTSPOT_RULE_DESCRIPTION));
     OrganizationDto organization = dbTester.organizations().insert();
-    underTest.commitAndIndex(dbTester.getSession(), rule.getUuid(), organization);
+    underTest.commitAndIndex(dbTester.getSession(), rule.getUuid());
 
     assertThat(logTester.getLogs()).hasSize(1);
-    assertThat(logTester.logs(LoggerLevel.WARN).get(0))
+    assertThat(logTester.logs(LoggerLevel.DEBUG).get(0))
       .isEqualTo(format(
         "Rule %s with CWEs '%s' maps to multiple SQ Security Categories: %s",
         rule.getKey(),
@@ -225,15 +180,15 @@ public class RuleIndexerTest {
 
   @Test
   @UseDataProvider("nullEmptyOrNoTitleDescription")
-  public void log_a_warning_when_hotspot_rule_description_is_null_or_empty(@Nullable String description) {
+  public void log_debug_when_hotspot_rule_description_is_null_or_empty(@Nullable String description) {
     RuleDefinitionDto rule = dbTester.rules().insert(RuleTesting.newRule()
       .setType(RuleType.SECURITY_HOTSPOT)
       .setDescription(description));
     OrganizationDto organization = dbTester.organizations().insert();
-    underTest.commitAndIndex(dbTester.getSession(), rule.getUuid(), organization);
+    underTest.commitAndIndex(dbTester.getSession(), rule.getUuid());
 
     assertThat(logTester.getLogs()).hasSize(1);
-    assertThat(logTester.logs(LoggerLevel.WARN).get(0))
+    assertThat(logTester.logs(LoggerLevel.DEBUG).get(0))
       .isEqualTo(format(
         "Description of Security Hotspot Rule %s can't be fully parsed: What is the risk?=missing, Are you vulnerable?=missing, How to fix it=missing",
         rule.getKey()));
@@ -248,39 +203,39 @@ public class RuleIndexerTest {
   }
 
   @Test
-  public void log_a_warning_when_hotspot_rule_description_has_none_of_the_key_titles() {
+  public void log_debug_when_hotspot_rule_description_has_none_of_the_key_titles() {
     RuleDefinitionDto rule = dbTester.rules().insert(RuleTesting.newRule()
       .setType(RuleType.SECURITY_HOTSPOT)
       .setDescription(randomAlphabetic(30)));
     OrganizationDto organization = dbTester.organizations().insert();
-    underTest.commitAndIndex(dbTester.getSession(), rule.getUuid(), organization);
+    underTest.commitAndIndex(dbTester.getSession(), rule.getUuid());
 
     assertThat(logTester.getLogs()).hasSize(1);
-    assertThat(logTester.logs(LoggerLevel.WARN).get(0))
+    assertThat(logTester.logs(LoggerLevel.DEBUG).get(0))
       .isEqualTo(format(
         "Description of Security Hotspot Rule %s can't be fully parsed: What is the risk?=ok, Are you vulnerable?=missing, How to fix it=missing",
         rule.getKey()));
   }
 
   @Test
-  public void log_a_warning_when_hotspot_rule_description_is_missing_fixIt_tab_content() {
+  public void log_debug_when_hotspot_rule_description_is_missing_fixIt_tab_content() {
     RuleDefinitionDto rule = dbTester.rules().insert(RuleTesting.newRule()
       .setType(RuleType.SECURITY_HOTSPOT)
       .setDescription("bar\n" +
         "<h2>Ask Yourself Whether</h2>\n" +
         "foo"));
     OrganizationDto organization = dbTester.organizations().insert();
-    underTest.commitAndIndex(dbTester.getSession(), rule.getUuid(), organization);
+    underTest.commitAndIndex(dbTester.getSession(), rule.getUuid());
 
     assertThat(logTester.getLogs()).hasSize(1);
-    assertThat(logTester.logs(LoggerLevel.WARN).get(0))
+    assertThat(logTester.logs(LoggerLevel.DEBUG).get(0))
       .isEqualTo(format(
         "Description of Security Hotspot Rule %s can't be fully parsed: What is the risk?=ok, Are you vulnerable?=ok, How to fix it=missing",
         rule.getKey()));
   }
 
   @Test
-  public void log_a_warning_when_hotspot_rule_description_is_missing_risk_tab_content() {
+  public void log_debug_when_hotspot_rule_description_is_missing_risk_tab_content() {
     RuleDefinitionDto rule = dbTester.rules().insert(RuleTesting.newRule()
       .setType(RuleType.SECURITY_HOTSPOT)
       .setDescription("<h2>Ask Yourself Whether</h2>\n" +
@@ -288,27 +243,27 @@ public class RuleIndexerTest {
         "<h2>Recommended Secure Coding Practices</h2>\n" +
         "foo"));
     OrganizationDto organization = dbTester.organizations().insert();
-    underTest.commitAndIndex(dbTester.getSession(), rule.getUuid(), organization);
+    underTest.commitAndIndex(dbTester.getSession(), rule.getUuid());
 
     assertThat(logTester.getLogs()).hasSize(1);
-    assertThat(logTester.logs(LoggerLevel.WARN).get(0))
+    assertThat(logTester.logs(LoggerLevel.DEBUG).get(0))
       .isEqualTo(format(
         "Description of Security Hotspot Rule %s can't be fully parsed: What is the risk?=missing, Are you vulnerable?=ok, How to fix it=ok",
         rule.getKey()));
   }
 
   @Test
-  public void log_a_warning_when_hotspot_rule_description_is_missing_vulnerable_tab_content() {
+  public void log_debug_when_hotspot_rule_description_is_missing_vulnerable_tab_content() {
     RuleDefinitionDto rule = dbTester.rules().insert(RuleTesting.newRule()
       .setType(RuleType.SECURITY_HOTSPOT)
       .setDescription("bar\n" +
         "<h2>Recommended Secure Coding Practices</h2>\n" +
         "foo"));
     OrganizationDto organization = dbTester.organizations().insert();
-    underTest.commitAndIndex(dbTester.getSession(), rule.getUuid(), organization);
+    underTest.commitAndIndex(dbTester.getSession(), rule.getUuid());
 
     assertThat(logTester.getLogs()).hasSize(1);
-    assertThat(logTester.logs(LoggerLevel.WARN).get(0))
+    assertThat(logTester.logs(LoggerLevel.DEBUG).get(0))
       .isEqualTo(format(
         "Description of Security Hotspot Rule %s can't be fully parsed: What is the risk?=ok, Are you vulnerable?=missing, How to fix it=ok",
         rule.getKey()));

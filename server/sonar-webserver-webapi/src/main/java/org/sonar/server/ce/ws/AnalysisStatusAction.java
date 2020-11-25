@@ -110,7 +110,6 @@ public class AnalysisStatusAction implements CeWsAction {
 
   private AnalysisStatusWsResponse.Component formatComponent(DbSession dbSession, ProjectDto project, @Nullable CeActivityDto lastActivity,
     @Nullable String branchKey, @Nullable String pullRequestKey) {
-
     AnalysisStatusWsResponse.Component.Builder builder = AnalysisStatusWsResponse.Component.newBuilder()
       .setOrganization(getOrganizationKey(dbSession, project))
       .setKey(project.getKey())
@@ -122,14 +121,25 @@ public class AnalysisStatusAction implements CeWsAction {
       builder.setPullRequest(pullRequestKey);
     }
 
-    if (lastActivity != null) {
-      List<String> warnings = dbClient.ceTaskMessageDao().selectByTask(dbSession, lastActivity.getUuid()).stream()
-        .map(CeTaskMessageDto::getMessage)
-        .collect(Collectors.toList());
-
-      builder.addAllWarnings(warnings);
+    if (lastActivity == null) {
+      return builder.build();
     }
 
+    List<CeTaskMessageDto> warnings;
+    String userUuid = userSession.getUuid();
+    if (userUuid != null) {
+      warnings = dbClient.ceTaskMessageDao().selectNonDismissedByUserAndTask(dbSession, lastActivity.getUuid(), userUuid);
+    } else {
+      warnings = dbClient.ceTaskMessageDao().selectByTask(dbSession, lastActivity.getUuid());
+    }
+
+    List<AnalysisStatusWsResponse.Warning> result = warnings.stream().map(dto -> AnalysisStatusWsResponse.Warning.newBuilder()
+      .setKey(dto.getUuid())
+      .setMessage(dto.getMessage())
+      .setDismissable(dto.getType().isDismissible())
+      .build())
+      .collect(Collectors.toList());
+    builder.addAllWarnings(result);
     return builder.build();
   }
 

@@ -68,13 +68,19 @@
         and p.copy_component_uuid is null
         and p.organization_uuid = #{organizationUuid, jdbcType=VARCHAR}
         and b.branch_type = #{branchType, jdbcType=VARCHAR}
-        and b.key_type = #{branch, jdbcType=VARCHAR}
         <if test="projectUuidToExclude != null">
           and b.project_uuid &lt;&gt; #{projectUuidToExclude,jdbcType=VARCHAR}
         </if>
       </where>
       group by b.project_uuid
     ) sumncloc
+  </select>
+
+  <select id="countProjectsHavingMeasure" parameterType="map" resultType="long">
+    select count(1)
+      from live_measures lm
+      inner join metrics m on m.uuid = lm.metric_uuid AND m.name = #{metric, jdbcType=VARCHAR}
+      inner join projects p on p.uuid = lm.component_uuid and p.qualifier = 'TRK'
   </select>
 
   <insert id="insert" parameterType="map" useGeneratedKeys="false">

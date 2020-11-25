@@ -19,13 +19,17 @@
  */
 import {
   AlmKeys,
+  AlmSettingsBindingStatus,
+  AlmSettingsBindingStatusType,
   AlmSettingsInstance,
   AzureBindingDefinition,
   BitbucketBindingDefinition,
   GithubBindingDefinition,
   GitlabBindingDefinition,
   ProjectAlmBindingResponse,
-  ProjectBitbucketBindingResponse
+  ProjectBitbucketBindingResponse,
+  ProjectGitHubBindingResponse,
+  ProjectGitLabBindingResponse
 } from '../../types/alm-settings';
 
 export function mockAlmSettingsInstance(
@@ -93,7 +97,7 @@ export function mockProjectAlmBindingResponse(
   };
 }
 
-export function mockProjectBitbucketBindingGet(
+export function mockProjectBitbucketBindingResponse(
   overrides: Partial<ProjectBitbucketBindingResponse> = {}
 ): ProjectBitbucketBindingResponse {
   return {
@@ -101,6 +105,40 @@ export function mockProjectBitbucketBindingGet(
     key: 'foo',
     repository: 'PROJECT_KEY',
     slug: 'repo-slug',
+    ...overrides
+  };
+}
+
+export function mockProjectGithubBindingResponse(
+  overrides: Partial<ProjectGitHubBindingResponse> = {}
+): ProjectGitHubBindingResponse {
+  return {
+    alm: AlmKeys.GitHub,
+    key: 'foo',
+    repository: 'PROJECT_KEY',
+    ...overrides
+  };
+}
+
+export function mockProjectGitLabBindingResponse(
+  overrides: Partial<ProjectGitLabBindingResponse> = {}
+): ProjectGitLabBindingResponse {
+  return {
+    alm: AlmKeys.GitLab,
+    key: 'foo',
+    repository: 'PROJECT_KEY',
+    url: 'https://gitlab.com/api/v4',
+    ...overrides
+  };
+}
+
+export function mockAlmSettingsBindingStatus(
+  overrides: Partial<AlmSettingsBindingStatus>
+): AlmSettingsBindingStatus {
+  return {
+    alertSuccess: false,
+    failureMessage: '',
+    type: AlmSettingsBindingStatusType.Validating,
     ...overrides
   };
 }

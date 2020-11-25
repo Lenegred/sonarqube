@@ -21,25 +21,35 @@ package org.sonar.ce.task.projectanalysis.step;
 
 import com.google.common.collect.ImmutableList;
 import java.util.List;
-import java.util.stream.Collectors;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
+import org.mockito.junit.MockitoJUnitRunner;
 import org.sonar.ce.task.log.CeTaskMessages;
 import org.sonar.ce.task.projectanalysis.batch.BatchReportReaderRule;
 import org.sonar.ce.task.step.TestComputationStepContext;
+import org.sonar.db.ce.CeTaskMessageType;
 import org.sonar.scanner.protocol.output.ScannerReport;
 
 import static com.google.common.collect.ImmutableList.of;
 import static java.util.Collections.emptyList;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.mockito.Mockito.verifyNoInteractions;
 
+@RunWith(MockitoJUnitRunner.class)
 public class PersistAnalysisWarningsStepTest {
 
   @Rule
   public BatchReportReaderRule reportReader = new BatchReportReaderRule();
+
+  @Captor
+  private ArgumentCaptor<List<CeTaskMessages.Message>> argumentCaptor;
 
   private final CeTaskMessages ceTaskMessages = mock(CeTaskMessages.class);
   private final PersistAnalysisWarningsStep underTest = new PersistAnalysisWarningsStep(reportReader, ceTaskMessages);
@@ -58,10 +68,10 @@ public class PersistAnalysisWarningsStepTest {
 
     underTest.execute(new TestComputationStepContext());
 
-    List<CeTaskMessages.Message> messages = warnings.stream()
-      .map(w -> new CeTaskMessages.Message(w.getText(), w.getTimestamp()))
-      .collect(Collectors.toList());
-    verify(ceTaskMessages).addAll(messages);
+    verify(ceTaskMessages, times(1)).addAll(argumentCaptor.capture());
+    assertThat(argumentCaptor.getValue())
+      .extracting(CeTaskMessages.Message::getText, CeTaskMessages.Message::getType)
+      .containsExactly(tuple("warning 1", CeTaskMessageType.GENERIC), tuple("warning 2", CeTaskMessageType.GENERIC));
   }
 
   @Test
@@ -70,6 +80,6 @@ public class PersistAnalysisWarningsStepTest {
 
     underTest.execute(new TestComputationStepContext());
 
-    verifyZeroInteractions(ceTaskMessages);
+    verifyNoInteractions(ceTaskMessages);
   }
 }

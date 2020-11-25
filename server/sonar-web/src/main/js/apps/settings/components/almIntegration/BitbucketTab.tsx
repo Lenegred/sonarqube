@@ -18,71 +18,48 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 import * as React from 'react';
-import { FormattedMessage } from 'react-intl';
 import { Link } from 'react-router';
-import { Alert } from 'sonar-ui-common/components/ui/Alert';
-import { translate, translateWithParameters } from 'sonar-ui-common/helpers/l10n';
+import { translate } from 'sonar-ui-common/helpers/l10n';
 import {
   createBitbucketConfiguration,
   updateBitbucketConfiguration
 } from '../../../../api/alm-settings';
-import { AlmKeys, BitbucketBindingDefinition } from '../../../../types/alm-settings';
+import {
+  AlmKeys,
+  AlmSettingsBindingStatus,
+  BitbucketBindingDefinition
+} from '../../../../types/alm-settings';
 import AlmTab from './AlmTab';
 import BitbucketForm from './BitbucketForm';
 
 export interface BitbucketTabProps {
   definitions: BitbucketBindingDefinition[];
+  definitionStatus: T.Dict<AlmSettingsBindingStatus>;
   loadingAlmDefinitions: boolean;
   loadingProjectCount: boolean;
   multipleAlmEnabled: boolean;
+  onCheck: (definitionKey: string) => void;
   onDelete: (definitionKey: string) => void;
   onUpdateDefinitions: () => void;
 }
 
 export default function BitbucketTab(props: BitbucketTabProps) {
-  const { multipleAlmEnabled, definitions, loadingAlmDefinitions, loadingProjectCount } = props;
+  const {
+    multipleAlmEnabled,
+    definitions,
+    definitionStatus,
+    loadingAlmDefinitions,
+    loadingProjectCount
+  } = props;
 
   return (
     <div className="bordered">
       <AlmTab
-        additionalColumnsHeaders={[translate('settings.almintegration.table.column.bitbucket.url')]}
-        additionalColumnsKeys={['url']}
-        additionalTableInfo={
-          <Alert className="big-spacer-bottom width-50" variant="info">
-            <FormattedMessage
-              defaultMessage={translate(
-                'settings.almintegration.feature.alm_repo_import.disabled_if_multiple_bbs_instances'
-              )}
-              id="settings.almintegration.feature.alm_repo_import.disabled_if_multiple_bbs_instances"
-              values={{
-                feature: (
-                  <em>{translate('settings.almintegration.feature.alm_repo_import.title')}</em>
-                )
-              }}
-            />
-          </Alert>
-        }
         alm={AlmKeys.Bitbucket}
         createConfiguration={createBitbucketConfiguration}
         defaultBinding={{ key: '', url: '', personalAccessToken: '' }}
         definitions={definitions}
-        features={[
-          {
-            name: translate('settings.almintegration.feature.pr_decoration.title'),
-            active: definitions.length > 0,
-            description: translate('settings.almintegration.feature.pr_decoration.description'),
-            inactiveReason: translate('settings.almintegration.feature.need_at_least_1_binding')
-          },
-          {
-            name: translate('settings.almintegration.feature.alm_repo_import.title'),
-            active: definitions.length === 1,
-            description: translate('settings.almintegration.feature.alm_repo_import.description'),
-            inactiveReason: translateWithParameters(
-              'onboarding.create_project.too_many_bbs_instances_X',
-              definitions.length
-            )
-          }
-        ]}
+        definitionStatus={definitionStatus}
         form={childProps => <BitbucketForm {...childProps} />}
         help={
           <>
@@ -107,6 +84,7 @@ export default function BitbucketTab(props: BitbucketTabProps) {
         loadingAlmDefinitions={loadingAlmDefinitions}
         loadingProjectCount={loadingProjectCount}
         multipleAlmEnabled={multipleAlmEnabled}
+        onCheck={props.onCheck}
         onDelete={props.onDelete}
         onUpdateDefinitions={props.onUpdateDefinitions}
         updateConfiguration={updateBitbucketConfiguration}

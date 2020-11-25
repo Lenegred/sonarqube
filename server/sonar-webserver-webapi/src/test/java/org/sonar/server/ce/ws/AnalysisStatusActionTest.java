@@ -30,6 +30,7 @@ import org.sonar.db.DbTester;
 import org.sonar.db.ce.CeActivityDto;
 import org.sonar.db.ce.CeQueueDto;
 import org.sonar.db.ce.CeTaskMessageDto;
+import org.sonar.db.ce.CeTaskMessageType;
 import org.sonar.db.component.BranchType;
 import org.sonar.db.component.ComponentDto;
 import org.sonar.db.component.SnapshotDto;
@@ -40,8 +41,10 @@ import org.sonar.server.exceptions.NotFoundException;
 import org.sonar.server.tester.UserSessionRule;
 import org.sonar.server.ws.WsActionTester;
 import org.sonarqube.ws.Ce;
+import org.sonarqube.ws.Ce.AnalysisStatusWsResponse.Warning;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.sonar.db.ce.CeActivityDto.Status.SUCCESS;
 import static org.sonar.db.ce.CeTaskTypes.REPORT;
 import static org.sonar.server.ce.ws.CeWsParameters.PARAM_BRANCH;
@@ -63,62 +66,17 @@ public class AnalysisStatusActionTest {
   @Rule
   public ExpectedException expectedException = ExpectedException.none();
   @Rule
-  public UserSessionRule userSession = UserSessionRule.standalone().logIn().setSystemAdministrator();
+  public UserSessionRule userSession = UserSessionRule.standalone();
   @Rule
   public DbTester db = DbTester.create(System2.INSTANCE);
 
-  private DbClient dbClient = db.getDbClient();
-  private WsActionTester ws = new WsActionTester(new AnalysisStatusAction(userSession, dbClient, TestComponentFinder.from(db)));
-
-  @Test
-  public void fail_if_component_key_not_provided() {
-    expectedException.expect(IllegalArgumentException.class);
-
-    ws.newRequest().execute();
-  }
-
-  @Test
-  public void fail_if_component_key_is_unknown() {
-    expectedException.expect(NotFoundException.class);
-
-    ws.newRequest().setParam(PARAM_COMPONENT, "nonexistent").execute();
-  }
-
-  @Test
-  public void fail_if_both_branch_and_pullRequest_are_specified() {
-    expectedException.expect(BadRequestException.class);
-
-    ws.newRequest()
-      .setParam(PARAM_COMPONENT, "dummy")
-      .setParam(PARAM_BRANCH, "feature1")
-      .setParam(PARAM_PULL_REQUEST, "pr1")
-      .execute();
-  }
-
-  @Test
-  public void json_example() {
-    OrganizationDto organization = db.organizations().insert(o -> o.setKey("my-org-1"));
-    ComponentDto project = db.components().insertPrivateProject(organization,
-      p -> p.setUuid("AU_w74XMgAS1Hm6h4-Y-")
-        .setProjectUuid("AU_w74XMgAS1Hm6h4-Y-")
-        .setRootUuid("AU_w74XMgAS1Hm6h4-Y-")
-        .setDbKey("com.github.kevinsawicki:http-request-parent")
-        .setName("HttpRequest"));
-
-    userSession.addProjectPermission(UserRole.USER, project);
-
-    String result = ws.newRequest()
-      .setParam(PARAM_COMPONENT, project.getKey())
-      .execute()
-      .getInput();
-
-    assertJson(result).isSimilarTo(getClass().getResource("analysis_status-example.json"));
-  }
+  DbClient dbClient = db.getDbClient();
+  WsActionTester ws = new WsActionTester(new AnalysisStatusAction(userSession, dbClient, TestComponentFinder.from(db)));
 
   @Test
   public void no_errors_no_warnings() {
     ComponentDto project = db.components().insertPrivateProject();
-    userSession.addProjectPermission(UserRole.USER, project);
+    userSession.logIn().setSystemAdministrator().addProjectPermission(UserRole.USER, project);
 
     Ce.AnalysisStatusWsResponse response = ws.newRequest()
       .setParam(PARAM_COMPONENT, project.getKey())
@@ -128,19 +86,40 @@ public class AnalysisStatusActionTest {
   }
 
   @Test
-  public void return_warnings_for_last_analysis_of_main() {
-    ComponentDto project = db.components().insertPrivateProject();
-    userSession.addProjectPermission(UserRole.USER, project);
-
+  public void allows_unauthenticated_access() {
+    ComponentDto project = db.components().insertPublicProject(db.getDefaultOrganization());
+    userSession.registerComponents(project);
     SnapshotDto analysis = db.components().insertSnapshot(project);
     CeActivityDto activity = insertActivity("task-uuid" + counter++, project, SUCCESS, analysis, REPORT);
     createTaskMessage(activity, WARNING_IN_MAIN);
+    createTaskMessage(activity, "Dismissible warning", CeTaskMessageType.SUGGEST_DEVELOPER_EDITION_UPGRADE);
 
     Ce.AnalysisStatusWsResponse response = ws.newRequest()
       .setParam(PARAM_COMPONENT, project.getKey())
       .executeProtobuf(Ce.AnalysisStatusWsResponse.class);
 
-    assertThat(response.getComponent().getWarningsList()).containsExactly(WARNING_IN_MAIN);
+    assertThat(response.getComponent().getWarningsList()).hasSize(2);
+  }
+
+  @Test
+  public void return_warnings_for_last_analysis_of_main() {
+    ComponentDto project = db.components().insertPrivateProject();
+    userSession.logIn().setSystemAdministrator().addProjectPermission(UserRole.USER, project);
+
+    SnapshotDto analysis = db.components().insertSnapshot(project);
+    CeActivityDto activity = insertActivity("task-uuid" + counter++, project, SUCCESS, analysis, REPORT);
+    CeTaskMessageDto taskMessage = createTaskMessage(activity, WARNING_IN_MAIN);
+    CeTaskMessageDto taskMessageDismissible = createTaskMessage(activity, "Dismissible warning", CeTaskMessageType.SUGGEST_DEVELOPER_EDITION_UPGRADE);
+
+    Ce.AnalysisStatusWsResponse response = ws.newRequest()
+      .setParam(PARAM_COMPONENT, project.getKey())
+      .executeProtobuf(Ce.AnalysisStatusWsResponse.class);
+
+    assertThat(response.getComponent().getWarningsList())
+      .extracting(Warning::getKey, Warning::getMessage, Warning::getDismissable)
+      .containsExactly(
+        tuple(taskMessage.getUuid(), WARNING_IN_MAIN, false),
+        tuple(taskMessageDismissible.getUuid(), taskMessageDismissible.getMessage(), true));
 
     SnapshotDto analysis2 = db.components().insertSnapshot(project);
     insertActivity("task-uuid" + counter++, project, SUCCESS, analysis2, REPORT);
@@ -156,19 +135,21 @@ public class AnalysisStatusActionTest {
   @Test
   public void return_warnings_for_last_analysis_of_branch() {
     ComponentDto project = db.components().insertPrivateProject();
-    userSession.addProjectPermission(UserRole.USER, project);
+    userSession.logIn().setSystemAdministrator().addProjectPermission(UserRole.USER, project);
 
     ComponentDto branch = db.components().insertProjectBranch(project, b -> b.setKey(BRANCH_WITH_WARNING));
     SnapshotDto analysis = db.components().insertSnapshot(branch);
     CeActivityDto activity = insertActivity("task-uuid" + counter++, branch, SUCCESS, analysis, REPORT);
-    createTaskMessage(activity, WARNING_IN_BRANCH);
+    CeTaskMessageDto taskMessage = createTaskMessage(activity, WARNING_IN_BRANCH);
 
     Ce.AnalysisStatusWsResponse response = ws.newRequest()
       .setParam(PARAM_COMPONENT, project.getKey())
       .setParam(PARAM_BRANCH, BRANCH_WITH_WARNING)
       .executeProtobuf(Ce.AnalysisStatusWsResponse.class);
 
-    assertThat(response.getComponent().getWarningsList()).containsExactly(WARNING_IN_BRANCH);
+    assertThat(response.getComponent().getWarningsList())
+      .extracting(Warning::getKey, Warning::getMessage, Warning::getDismissable)
+      .containsExactly(tuple(taskMessage.getUuid(), WARNING_IN_BRANCH, false));
 
     SnapshotDto analysis2 = db.components().insertSnapshot(branch);
     insertActivity("task-uuid" + counter++, branch, SUCCESS, analysis2, REPORT);
@@ -185,7 +166,7 @@ public class AnalysisStatusActionTest {
   @Test
   public void return_warnings_for_last_analysis_of_pull_request() {
     ComponentDto project = db.components().insertPrivateProject();
-    userSession.addProjectPermission(UserRole.USER, project);
+    userSession.logIn().setSystemAdministrator().addProjectPermission(UserRole.USER, project);
 
     ComponentDto pullRequest = db.components().insertProjectBranch(project, b -> {
       b.setBranchType(BranchType.PULL_REQUEST);
@@ -193,14 +174,16 @@ public class AnalysisStatusActionTest {
     });
     SnapshotDto analysis = db.components().insertSnapshot(pullRequest);
     CeActivityDto activity = insertActivity("task-uuid" + counter++, pullRequest, SUCCESS, analysis, REPORT);
-    createTaskMessage(activity, WARNING_IN_PR);
+    CeTaskMessageDto taskMessage = createTaskMessage(activity, WARNING_IN_PR);
 
     Ce.AnalysisStatusWsResponse response = ws.newRequest()
       .setParam(PARAM_COMPONENT, project.getKey())
       .setParam(PARAM_PULL_REQUEST, PULL_REQUEST)
       .executeProtobuf(Ce.AnalysisStatusWsResponse.class);
 
-    assertThat(response.getComponent().getWarningsList()).containsExactly(WARNING_IN_PR);
+    assertThat(response.getComponent().getWarningsList())
+      .extracting(Warning::getKey, Warning::getMessage, Warning::getDismissable)
+      .containsExactly(tuple(taskMessage.getUuid(), WARNING_IN_PR, false));
 
     SnapshotDto analysis2 = db.components().insertSnapshot(pullRequest);
     insertActivity("task-uuid" + counter++, pullRequest, SUCCESS, analysis2, REPORT);
@@ -217,16 +200,16 @@ public class AnalysisStatusActionTest {
   @Test
   public void return_warnings_per_branch() {
     ComponentDto project = db.components().insertPrivateProject();
-    userSession.addProjectPermission(UserRole.USER, project);
+    userSession.logIn().setSystemAdministrator().addProjectPermission(UserRole.USER, project);
 
     SnapshotDto analysis = db.components().insertSnapshot(project);
     CeActivityDto activity = insertActivity("task-uuid" + counter++, project, SUCCESS, analysis, REPORT);
-    createTaskMessage(activity, WARNING_IN_MAIN);
+    CeTaskMessageDto warningInMainMessage = createTaskMessage(activity, WARNING_IN_MAIN);
 
     ComponentDto branchWithWarning = db.components().insertProjectBranch(project, b -> b.setKey(BRANCH_WITH_WARNING));
     SnapshotDto branchAnalysis = db.components().insertSnapshot(branchWithWarning);
     CeActivityDto branchActivity = insertActivity("task-uuid" + counter++, branchWithWarning, SUCCESS, branchAnalysis, REPORT);
-    createTaskMessage(branchActivity, WARNING_IN_BRANCH);
+    CeTaskMessageDto warningInBranchMessage = createTaskMessage(branchActivity, WARNING_IN_BRANCH);
 
     ComponentDto branchWithoutWarning = db.components().insertProjectBranch(project, b -> b.setKey(BRANCH_WITHOUT_WARNING));
     SnapshotDto branchWithoutWarningAnalysis = db.components().insertSnapshot(branchWithoutWarning);
@@ -238,20 +221,24 @@ public class AnalysisStatusActionTest {
     });
     SnapshotDto prAnalysis = db.components().insertSnapshot(pullRequest);
     CeActivityDto prActivity = insertActivity("task-uuid" + counter++, pullRequest, SUCCESS, prAnalysis, REPORT);
-    createTaskMessage(prActivity, WARNING_IN_PR);
+    CeTaskMessageDto warningInPrMessage = createTaskMessage(prActivity, WARNING_IN_PR);
 
     Ce.AnalysisStatusWsResponse responseForMain = ws.newRequest()
       .setParam(PARAM_COMPONENT, project.getKey())
       .executeProtobuf(Ce.AnalysisStatusWsResponse.class);
 
-    assertThat(responseForMain.getComponent().getWarningsList()).containsExactly(WARNING_IN_MAIN);
+    assertThat(responseForMain.getComponent().getWarningsList())
+      .extracting(Warning::getKey, Warning::getMessage, Warning::getDismissable)
+      .containsExactly(tuple(warningInMainMessage.getUuid(), WARNING_IN_MAIN, false));
 
     Ce.AnalysisStatusWsResponse responseForBranchWithWarning = ws.newRequest()
       .setParam(PARAM_COMPONENT, project.getKey())
       .setParam(PARAM_BRANCH, BRANCH_WITH_WARNING)
       .executeProtobuf(Ce.AnalysisStatusWsResponse.class);
 
-    assertThat(responseForBranchWithWarning.getComponent().getWarningsList()).containsExactly(WARNING_IN_BRANCH);
+    assertThat(responseForBranchWithWarning.getComponent().getWarningsList())
+      .extracting(Warning::getKey, Warning::getMessage, Warning::getDismissable)
+      .containsExactly(tuple(warningInBranchMessage.getUuid(), WARNING_IN_BRANCH, false));
 
     Ce.AnalysisStatusWsResponse responseForBranchWithoutWarning = ws.newRequest()
       .setParam(PARAM_COMPONENT, project.getKey())
@@ -265,13 +252,15 @@ public class AnalysisStatusActionTest {
       .setParam(PARAM_PULL_REQUEST, PULL_REQUEST)
       .executeProtobuf(Ce.AnalysisStatusWsResponse.class);
 
-    assertThat(responseForPr.getComponent().getWarningsList()).containsExactly(WARNING_IN_PR);
+    assertThat(responseForPr.getComponent().getWarningsList())
+      .extracting(Warning::getKey, Warning::getMessage, Warning::getDismissable)
+      .containsExactly(tuple(warningInPrMessage.getUuid(), WARNING_IN_PR, false));
   }
 
   @Test
   public void response_contains_branch_or_pullRequest_for_branch_or_pullRequest_only() {
     ComponentDto project = db.components().insertPrivateProject();
-    userSession.addProjectPermission(UserRole.USER, project);
+    userSession.logIn().setSystemAdministrator().addProjectPermission(UserRole.USER, project);
 
     db.components().insertProjectBranch(project, b -> b.setKey(BRANCH_WITHOUT_WARNING));
 
@@ -304,13 +293,72 @@ public class AnalysisStatusActionTest {
     assertThat(responseForPr.getComponent().getPullRequest()).isEqualTo(PULL_REQUEST);
   }
 
-  private void createTaskMessage(CeActivityDto activity, String warning) {
-    db.getDbClient().ceTaskMessageDao().insert(db.getSession(), new CeTaskMessageDto()
+  @Test
+  public void json_example() {
+    OrganizationDto organization = db.organizations().insert(o -> o.setKey("my-org-1"));
+    ComponentDto project = db.components().insertPrivateProject(organization,
+      p -> p.setDbKey("com.github.kevinsawicki:http-request-parent")
+        .setName("HttpRequest"));
+    SnapshotDto analysis = db.components().insertSnapshot(project);
+    CeActivityDto activity = insertActivity("task-uuid" + counter++, project, SUCCESS, analysis, REPORT);
+    CeTaskMessageDto ceTaskMessage = new CeTaskMessageDto()
+      .setUuid("AU-Tpxb--iU5OvuD2FLy")
+      .setTaskUuid(activity.getUuid())
+      .setMessage("Property \"sonar.jacoco.reportPaths\" is no longer supported. Use JaCoCo xml report and sonar-jacoco plugin.")
+      .setType(CeTaskMessageType.GENERIC)
+      .setCreatedAt(counter);
+    db.getDbClient().ceTaskMessageDao().insert(db.getSession(), ceTaskMessage);
+    db.commit();
+
+    userSession.logIn().setSystemAdministrator().addProjectPermission(UserRole.USER, project);
+
+    String result = ws.newRequest()
+      .setParam(PARAM_COMPONENT, project.getKey())
+      .execute()
+      .getInput();
+
+    assertJson(result).isSimilarTo(getClass().getResource("analysis_status-example.json"));
+  }
+
+  @Test
+  public void fail_if_component_key_not_provided() {
+    expectedException.expect(IllegalArgumentException.class);
+
+    ws.newRequest().execute();
+  }
+
+  @Test
+  public void fail_if_component_key_is_unknown() {
+    expectedException.expect(NotFoundException.class);
+
+    ws.newRequest().setParam(PARAM_COMPONENT, "nonexistent").execute();
+  }
+
+  @Test
+  public void fail_if_both_branch_and_pullRequest_are_specified() {
+    expectedException.expect(BadRequestException.class);
+
+    ws.newRequest()
+      .setParam(PARAM_COMPONENT, "dummy")
+      .setParam(PARAM_BRANCH, "feature1")
+      .setParam(PARAM_PULL_REQUEST, "pr1")
+      .execute();
+  }
+
+  private CeTaskMessageDto createTaskMessage(CeActivityDto activity, String warning) {
+    return createTaskMessage(activity, warning, CeTaskMessageType.GENERIC);
+  }
+
+  private CeTaskMessageDto createTaskMessage(CeActivityDto activity, String warning, CeTaskMessageType messageType) {
+    CeTaskMessageDto ceTaskMessageDto = new CeTaskMessageDto()
       .setUuid("m-uuid-" + counter++)
       .setTaskUuid(activity.getUuid())
       .setMessage(warning)
-      .setCreatedAt(counter));
+      .setType(messageType)
+      .setCreatedAt(counter);
+    db.getDbClient().ceTaskMessageDao().insert(db.getSession(), ceTaskMessageDto);
     db.commit();
+    return ceTaskMessageDto;
   }
 
   private CeActivityDto insertActivity(String taskUuid, ComponentDto component, CeActivityDto.Status status, @Nullable SnapshotDto analysis, String taskType) {

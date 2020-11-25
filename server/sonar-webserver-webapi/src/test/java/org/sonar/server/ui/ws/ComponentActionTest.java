@@ -39,10 +39,8 @@ import org.sonar.core.component.DefaultResourceTypes;
 import org.sonar.core.extension.CoreExtensionRepository;
 import org.sonar.core.platform.PluginInfo;
 import org.sonar.core.platform.PluginRepository;
-import org.sonar.core.util.UuidFactoryImpl;
 import org.sonar.db.DbClient;
 import org.sonar.db.DbTester;
-import org.sonar.db.alm.ALM;
 import org.sonar.db.component.BranchDto;
 import org.sonar.db.component.BranchType;
 import org.sonar.db.component.ComponentDbTester;
@@ -50,7 +48,7 @@ import org.sonar.db.component.ComponentDto;
 import org.sonar.db.component.SnapshotDto;
 import org.sonar.db.metric.MetricDto;
 import org.sonar.db.organization.OrganizationDto;
-import org.sonar.db.permission.OrganizationPermission;
+import org.sonar.db.permission.GlobalPermission;
 import org.sonar.db.project.ProjectDto;
 import org.sonar.db.property.PropertyDbTester;
 import org.sonar.db.property.PropertyDto;
@@ -86,8 +84,8 @@ import static org.sonar.db.component.ComponentTesting.newPrivateProjectDto;
 import static org.sonar.db.component.SnapshotTesting.newAnalysis;
 import static org.sonar.db.measure.MeasureTesting.newLiveMeasure;
 import static org.sonar.db.metric.MetricTesting.newMetricDto;
-import static org.sonar.db.permission.OrganizationPermission.ADMINISTER_QUALITY_GATES;
-import static org.sonar.db.permission.OrganizationPermission.ADMINISTER_QUALITY_PROFILES;
+import static org.sonar.db.permission.GlobalPermission.ADMINISTER_QUALITY_GATES;
+import static org.sonar.db.permission.GlobalPermission.ADMINISTER_QUALITY_PROFILES;
 import static org.sonar.server.ui.ws.ComponentAction.PARAM_COMPONENT;
 import static org.sonar.test.JsonAssert.assertJson;
 
@@ -258,8 +256,8 @@ public class ComponentActionTest {
   public void return_quality_profiles_and_supports_deleted_ones() {
     OrganizationDto organization = db.organizations().insert(o -> o.setKey("my-org"));
     ComponentDto project = insertProject(organization);
-    QProfileDto qp1 = db.qualityProfiles().insert(organization, t -> t.setKee("qp1").setName("Sonar Way Java").setLanguage("java"));
-    QProfileDto qp2 = db.qualityProfiles().insert(organization, t -> t.setKee("qp2").setName("Sonar Way Xoo").setLanguage("xoo"));
+    QProfileDto qp1 = db.qualityProfiles().insert(t -> t.setKee("qp1").setName("Sonar Way Java").setLanguage("java"));
+    QProfileDto qp2 = db.qualityProfiles().insert(t -> t.setKee("qp2").setName("Sonar Way Xoo").setLanguage("xoo"));
     addQualityProfiles(project,
       new QualityProfile(qp1.getKee(), qp1.getName(), qp1.getLanguage(), new Date()),
       new QualityProfile(qp2.getKee(), qp2.getName(), qp2.getLanguage(), new Date()));
@@ -420,7 +418,7 @@ public class ComponentActionTest {
     ComponentDto project = insertOrganizationAndProject();
     userSession.logIn()
       .addProjectPermission(UserRole.USER, project)
-      .addPermission(ADMINISTER_QUALITY_PROFILES, project.getOrganizationUuid());
+      .addPermission(ADMINISTER_QUALITY_PROFILES);
     init();
 
     executeAndVerify(project.getDbKey(), "return_configuration_for_quality_profile_admin.json");
@@ -431,7 +429,7 @@ public class ComponentActionTest {
     ComponentDto project = insertOrganizationAndProject();
     userSession.logIn()
       .addProjectPermission(UserRole.USER, project)
-      .addPermission(ADMINISTER_QUALITY_GATES, project.getOrganizationUuid());
+      .addPermission(ADMINISTER_QUALITY_GATES);
     init();
 
     executeAndVerify(project.getDbKey(), "return_configuration_for_quality_gate_admin.json");
@@ -512,7 +510,7 @@ public class ComponentActionTest {
 
     userSession.logIn()
       .addProjectPermission(UserRole.ADMIN, project)
-      .addPermission(OrganizationPermission.ADMINISTER, org);
+      .addPermission(GlobalPermission.ADMINISTER);
     assertJson(execute(project.getDbKey())).isSimilarTo("{\"visibility\": \"private\"}");
   }
 
@@ -525,7 +523,7 @@ public class ComponentActionTest {
 
     userSession.logIn()
       .addProjectPermission(UserRole.ADMIN, project)
-      .addPermission(OrganizationPermission.ADMINISTER, org);
+      .addPermission(GlobalPermission.ADMINISTER);
     assertJson(execute(project.getDbKey())).isSimilarTo("{\"visibility\": \"public\"}");
   }
 
@@ -538,7 +536,7 @@ public class ComponentActionTest {
 
     userSession.logIn()
       .addProjectPermission(UserRole.ADMIN, project)
-      .addPermission(OrganizationPermission.ADMINISTER, org);
+      .addPermission(GlobalPermission.ADMINISTER);
     assertJson(execute(project.getDbKey())).isSimilarTo("{\"configuration\": {\"canApplyPermissionTemplate\": true}}");
 
     userSession.logIn()
@@ -644,29 +642,6 @@ public class ComponentActionTest {
     assertThat(componentId.deprecatedKeySince()).isEqualTo("6.4");
   }
 
-  @Test
-  public void return_alm_info_on_project() {
-    ComponentDto project = insertOrganizationAndProject();
-    dbClient.projectAlmBindingsDao().insertOrUpdate(db.getSession(), ALM.BITBUCKETCLOUD, "{123456789}", project.uuid(), null, "http://bitbucket.org/foo/bar");
-    db.getSession().commit();
-    userSession.addProjectPermission(UserRole.USER, project);
-    init();
-
-    String json = execute(project.getKey());
-
-    assertJson(json).isSimilarTo("{\n" +
-      "  \"organization\": \"my-org\",\n" +
-      "  \"key\": \"polop\",\n" +
-      "  \"id\": \"abcd\",\n" +
-      "  \"name\": \"Polop\",\n" +
-      "  \"description\": \"test project\",\n" +
-      "  \"alm\": {\n" +
-      "     \"key\": \"bitbucketcloud\",\n" +
-      "     \"url\": \"http://bitbucket.org/foo/bar\"\n" +
-      "  }\n" +
-      "}\n");
-  }
-
   @Test(expected = BadRequestException.class)
   public void fail_on_module_key_as_param() {
     ComponentDto project = insertOrganizationAndProject();
@@ -685,35 +660,6 @@ public class ComponentActionTest {
     init();
 
     execute(directory.getDbKey());
-  }
-
-  @Test
-  public void return_alm_info_on_branch() {
-    ComponentDto project = insertOrganizationAndProject();
-    ComponentDto branch = componentDbTester.insertProjectBranch(project, b -> b.setKey("feature1").setUuid("xyz"));
-    dbClient.projectAlmBindingsDao().insertOrUpdate(db.getSession(), ALM.BITBUCKETCLOUD, "{123456789}", project.uuid(), null, "http://bitbucket.org/foo/bar");
-    db.getSession().commit();
-    userSession.addProjectPermission(UserRole.USER, project);
-    init();
-
-    String json = ws.newRequest()
-      .setParam("componentKey", project.getKey())
-      .setParam("branch", branch.getBranch())
-      .execute()
-      .getInput();
-
-    assertJson(json).isSimilarTo("{\n" +
-      "  \"organization\": \"my-org\",\n" +
-      "  \"key\": \"polop\",\n" +
-      "  \"id\": \"xyz\",\n" +
-      "  \"branch\": \"feature1\"," +
-      "  \"name\": \"Polop\",\n" +
-      "  \"description\": \"test project\",\n" +
-      "  \"alm\": {\n" +
-      "     \"key\": \"bitbucketcloud\",\n" +
-      "     \"url\": \"http://bitbucket.org/foo/bar\"\n" +
-      "  }\n" +
-      "}\n");
   }
 
   private ComponentDto insertOrganizationAndProject() {

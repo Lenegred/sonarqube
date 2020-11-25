@@ -36,7 +36,6 @@ import org.sonar.process.cluster.hz.HazelcastMemberBuilder;
 
 import static java.util.Arrays.asList;
 import static org.sonar.process.ProcessProperties.Property.CLUSTER_HZ_HOSTS;
-import static org.sonar.process.ProcessProperties.Property.CLUSTER_NAME;
 import static org.sonar.process.ProcessProperties.Property.CLUSTER_NODE_HOST;
 import static org.sonar.process.ProcessProperties.Property.CLUSTER_NODE_HZ_PORT;
 import static org.sonar.process.ProcessProperties.Property.CLUSTER_NODE_NAME;
@@ -74,6 +73,6 @@ public class AppStateFactory {
     Set<HostAndPort> hostAndPorts = Arrays.stream(searchHosts.split(","))
       .map(HostAndPort::fromString)
       .collect(Collectors.toSet());
-    return new EsConnectorImpl(props.nonNullValue(CLUSTER_NAME.getKey()), hostAndPorts);
+    return new EsConnectorImpl(hostAndPorts);
   }
 }

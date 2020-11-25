@@ -19,35 +19,38 @@
  */
 package org.sonar.application.config;
 
+import com.google.common.collect.ImmutableMap;
 import java.net.InetAddress;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 import org.hamcrest.CoreMatchers;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.sonar.process.MessageException;
 import org.sonar.process.NetworkUtils;
 import org.sonar.process.NetworkUtilsImpl;
+import org.sonar.process.Props;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.Assume.assumeThat;
 import static org.mockito.Mockito.spy;
 import static org.sonar.process.ProcessProperties.Property.CLUSTER_ENABLED;
+import static org.sonar.process.ProcessProperties.Property.CLUSTER_ES_HOSTS;
 import static org.sonar.process.ProcessProperties.Property.CLUSTER_HZ_HOSTS;
+import static org.sonar.process.ProcessProperties.Property.CLUSTER_NODE_ES_HOST;
 import static org.sonar.process.ProcessProperties.Property.CLUSTER_NODE_HOST;
+import static org.sonar.process.ProcessProperties.Property.CLUSTER_NODE_SEARCH_HOST;
 import static org.sonar.process.ProcessProperties.Property.CLUSTER_NODE_TYPE;
 import static org.sonar.process.ProcessProperties.Property.CLUSTER_SEARCH_HOSTS;
 import static org.sonar.process.ProcessProperties.Property.JDBC_URL;
-import static org.sonar.process.ProcessProperties.Property.SEARCH_HOST;
 
 public class ClusterSettingsLoopbackTest {
 
-  @Rule
-  public ExpectedException expectedException = ExpectedException.none();
+  private final InetAddress loopback = InetAddress.getLoopbackAddress();
+  private final NetworkUtils network = spy(NetworkUtilsImpl.INSTANCE);
 
-  private InetAddress loopback = InetAddress.getLoopbackAddress();
   private InetAddress nonLoopbackLocal;
-  private NetworkUtils network = spy(NetworkUtilsImpl.INSTANCE);
 
   @Before
   public void setUp() {
@@ -58,57 +61,59 @@ public class ClusterSettingsLoopbackTest {
   }
 
   @Test
-  public void ClusterSettings_throws_MessageException_if_host_of_search_node_is_loopback() {
-    verifySearchFailureIfLoopback(CLUSTER_NODE_HOST.getKey());
-    verifySearchFailureIfLoopback(CLUSTER_SEARCH_HOSTS.getKey());
-    verifySearchFailureIfLoopback(CLUSTER_HZ_HOSTS.getKey());
-    verifySearchFailureIfLoopback(SEARCH_HOST.getKey());
+  public void ClusterSettings_throws_MessageException_if_es_http_host_of_search_node_is_loopback() {
+    TestAppSettings settings = newSettingsForSearchNode(ImmutableMap.of(CLUSTER_NODE_SEARCH_HOST.getKey(), loopback.getHostAddress()));
+    Props props = settings.getProps();
+    ClusterSettings clusterSettings = new ClusterSettings(network);
+
+    assertThatThrownBy(() -> clusterSettings.accept(props))
+      .isInstanceOf(MessageException.class)
+      .hasMessage("Property " + CLUSTER_NODE_SEARCH_HOST.getKey() + " must be a local non-loopback address: " + loopback.getHostAddress());
+  }
+
+  @Test
+  public void ClusterSettings_throws_MessageException_if_es_transport_host_of_search_node_is_loopback() {
+    TestAppSettings settings = newSettingsForSearchNode(ImmutableMap.of(CLUSTER_NODE_ES_HOST.getKey(), loopback.getHostAddress()));
+    Props props = settings.getProps();
+    ClusterSettings clusterSettings = new ClusterSettings(network);
+
+    assertThatThrownBy(() -> clusterSettings.accept(props))
+      .isInstanceOf(MessageException.class)
+      .hasMessage("Property " + CLUSTER_NODE_ES_HOST.getKey() + " must be a local non-loopback address: " + loopback.getHostAddress());
   }
 
   @Test
   public void ClusterSettings_throws_MessageException_if_host_of_app_node_is_loopback() {
-    verifyAppFailureIfLoopback(CLUSTER_NODE_HOST.getKey());
-    verifyAppFailureIfLoopback(CLUSTER_SEARCH_HOSTS.getKey());
-    verifyAppFailureIfLoopback(CLUSTER_HZ_HOSTS.getKey());
+    TestAppSettings settings = newSettingsForAppNode(ImmutableMap.of(CLUSTER_NODE_HOST.getKey(), loopback.getHostAddress()));
+    Props props = settings.getProps();
+    ClusterSettings clusterSettings = new ClusterSettings(network);
+
+    assertThatThrownBy(() -> clusterSettings.accept(props))
+      .isInstanceOf(MessageException.class)
+      .hasMessage("Property " + CLUSTER_NODE_HOST.getKey() + " must be a local non-loopback address: " + loopback.getHostAddress());
   }
 
-  private void verifySearchFailureIfLoopback(String propertyKey) {
-    TestAppSettings settings = newSettingsForSearchNode();
-    verifyFailure(propertyKey, settings);
+  private TestAppSettings newSettingsForAppNode(ImmutableMap<String, String> settings) {
+    Map<String, String> result = new HashMap<>();
+    result.put(CLUSTER_ENABLED.getKey(), "true");
+    result.put(CLUSTER_NODE_TYPE.getKey(), "application");
+    result.put(CLUSTER_NODE_HOST.getKey(), nonLoopbackLocal.getHostAddress());
+    result.put(CLUSTER_HZ_HOSTS.getKey(), nonLoopbackLocal.getHostAddress());
+    result.put(CLUSTER_SEARCH_HOSTS.getKey(), nonLoopbackLocal.getHostAddress());
+    result.put("sonar.auth.jwtBase64Hs256Secret", "abcde");
+    result.put(JDBC_URL.getKey(), "jdbc:postgresql://localhost:3306/sonar");
+    result.putAll(settings);
+    return new TestAppSettings(result);
   }
 
-  private void verifyAppFailureIfLoopback(String propertyKey) {
-    TestAppSettings settings = newSettingsForAppNode();
-    verifyFailure(propertyKey, settings);
-  }
-
-  private void verifyFailure(String propertyKey, TestAppSettings settings) {
-    settings.set(propertyKey, loopback.getHostAddress());
-
-    expectedException.expect(MessageException.class);
-    expectedException.expectMessage("Property " + propertyKey + " must be a local non-loopback address: " + loopback.getHostAddress());
-
-    new ClusterSettings(network).accept(settings.getProps());
-  }
-
-  private TestAppSettings newSettingsForAppNode() {
-    return new TestAppSettings()
-      .set(CLUSTER_ENABLED.getKey(), "true")
-      .set(CLUSTER_NODE_TYPE.getKey(), "application")
-      .set(CLUSTER_NODE_HOST.getKey(), nonLoopbackLocal.getHostAddress())
-      .set(CLUSTER_HZ_HOSTS.getKey(), nonLoopbackLocal.getHostAddress())
-      .set(CLUSTER_SEARCH_HOSTS.getKey(), nonLoopbackLocal.getHostAddress())
-      .set("sonar.auth.jwtBase64Hs256Secret", "abcde")
-      .set(JDBC_URL.getKey(), "jdbc:postgresql://localhost:3306/sonar");
-  }
-
-  private TestAppSettings newSettingsForSearchNode() {
-    return new TestAppSettings()
-      .set(CLUSTER_ENABLED.getKey(), "true")
-      .set(CLUSTER_NODE_TYPE.getKey(), "search")
-      .set(CLUSTER_NODE_HOST.getKey(), nonLoopbackLocal.getHostAddress())
-      .set(CLUSTER_HZ_HOSTS.getKey(), nonLoopbackLocal.getHostAddress())
-      .set(CLUSTER_SEARCH_HOSTS.getKey(), nonLoopbackLocal.getHostAddress())
-      .set(SEARCH_HOST.getKey(), nonLoopbackLocal.getHostAddress());
+  private TestAppSettings newSettingsForSearchNode(ImmutableMap<String, String> settings) {
+    Map<String, String> result = new HashMap<>();
+    result.put(CLUSTER_ENABLED.getKey(), "true");
+    result.put(CLUSTER_NODE_TYPE.getKey(), "search");
+    result.put(CLUSTER_ES_HOSTS.getKey(), nonLoopbackLocal.getHostAddress());
+    result.put(CLUSTER_NODE_SEARCH_HOST.getKey(), nonLoopbackLocal.getHostAddress());
+    result.put(CLUSTER_NODE_ES_HOST.getKey(), nonLoopbackLocal.getHostAddress());
+    result.putAll(settings);
+    return new TestAppSettings(result);
   }
 }

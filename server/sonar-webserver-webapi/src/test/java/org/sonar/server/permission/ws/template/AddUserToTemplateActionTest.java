@@ -27,7 +27,6 @@ import org.sonar.api.resources.Qualifiers;
 import org.sonar.api.resources.ResourceTypes;
 import org.sonar.core.permission.GlobalPermissions;
 import org.sonar.db.component.ResourceTypesRule;
-import org.sonar.db.organization.OrganizationDto;
 import org.sonar.db.permission.PermissionQuery;
 import org.sonar.db.permission.template.PermissionTemplateDto;
 import org.sonar.db.user.UserDto;
@@ -43,9 +42,9 @@ import org.sonar.server.ws.TestRequest;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.sonar.api.web.UserRole.CODEVIEWER;
 import static org.sonar.api.web.UserRole.ISSUE_ADMIN;
-import static org.sonar.db.permission.OrganizationPermission.ADMINISTER_QUALITY_PROFILES;
-import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_ORGANIZATION;
+import static org.sonar.db.permission.GlobalPermission.ADMINISTER_QUALITY_PROFILES;
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_PERMISSION;
+import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_TEMPLATE_ID;
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_TEMPLATE_NAME;
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_USER_LOGIN;
 
@@ -65,13 +64,12 @@ public class AddUserToTemplateActionTest extends BasePermissionWsTest<AddUserToT
   @Before
   public void setUp() {
     user = db.users().insertUser("user-login");
-    db.organizations().addMember(db.getDefaultOrganization(), user);
-    permissionTemplate = db.permissionTemplates().insertTemplate(db.getDefaultOrganization());
+    permissionTemplate = db.permissionTemplates().insertTemplate();
   }
 
   @Test
   public void add_user_to_template() {
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
 
     newRequest(user.getLogin(), permissionTemplate.getUuid(), CODEVIEWER);
 
@@ -80,29 +78,12 @@ public class AddUserToTemplateActionTest extends BasePermissionWsTest<AddUserToT
 
   @Test
   public void add_user_to_template_by_name() {
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
 
     newRequest()
       .setParam(PARAM_USER_LOGIN, user.getLogin())
       .setParam(PARAM_PERMISSION, CODEVIEWER)
       .setParam(PARAM_TEMPLATE_NAME, permissionTemplate.getName().toUpperCase())
-      .execute();
-
-    assertThat(getLoginsInTemplateAndPermission(permissionTemplate, CODEVIEWER)).containsExactly(user.getLogin());
-  }
-
-  @Test
-  public void add_user_to_template_by_name_and_organization() {
-    OrganizationDto organizationDto = db.organizations().insert();
-    PermissionTemplateDto permissionTemplate = db.permissionTemplates().insertTemplate(organizationDto);
-    addUserAsMemberOfOrganization(organizationDto);
-    loginAsAdmin(organizationDto);
-
-    newRequest()
-      .setParam(PARAM_USER_LOGIN, user.getLogin())
-      .setParam(PARAM_PERMISSION, CODEVIEWER)
-      .setParam(PARAM_TEMPLATE_NAME, permissionTemplate.getName().toUpperCase())
-      .setParam(PARAM_ORGANIZATION, organizationDto.getKey())
       .execute();
 
     assertThat(getLoginsInTemplateAndPermission(permissionTemplate, CODEVIEWER)).containsExactly(user.getLogin());
@@ -110,7 +91,7 @@ public class AddUserToTemplateActionTest extends BasePermissionWsTest<AddUserToT
 
   @Test
   public void does_not_add_a_user_twice() {
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
 
     newRequest(user.getLogin(), permissionTemplate.getUuid(), ISSUE_ADMIN);
     newRequest(user.getLogin(), permissionTemplate.getUuid(), ISSUE_ADMIN);
@@ -120,7 +101,7 @@ public class AddUserToTemplateActionTest extends BasePermissionWsTest<AddUserToT
 
   @Test
   public void fail_if_not_a_project_permission() {
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
 
     expectedException.expect(IllegalArgumentException.class);
 
@@ -128,8 +109,8 @@ public class AddUserToTemplateActionTest extends BasePermissionWsTest<AddUserToT
   }
 
   @Test
-  public void fail_if_not_admin_of_default_organization() {
-    userSession.logIn().addPermission(ADMINISTER_QUALITY_PROFILES, db.getDefaultOrganization());
+  public void fail_if_not_admin() {
+    userSession.logIn().addPermission(ADMINISTER_QUALITY_PROFILES);
 
     expectedException.expect(ForbiddenException.class);
 
@@ -138,7 +119,7 @@ public class AddUserToTemplateActionTest extends BasePermissionWsTest<AddUserToT
 
   @Test
   public void fail_if_user_missing() {
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
 
     expectedException.expect(IllegalArgumentException.class);
 
@@ -147,7 +128,7 @@ public class AddUserToTemplateActionTest extends BasePermissionWsTest<AddUserToT
 
   @Test
   public void fail_if_permission_missing() {
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
 
     expectedException.expect(IllegalArgumentException.class);
 
@@ -156,7 +137,7 @@ public class AddUserToTemplateActionTest extends BasePermissionWsTest<AddUserToT
 
   @Test
   public void fail_if_template_uuid_and_name_are_missing() {
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
 
     expectedException.expect(BadRequestException.class);
 
@@ -165,7 +146,7 @@ public class AddUserToTemplateActionTest extends BasePermissionWsTest<AddUserToT
 
   @Test
   public void fail_if_user_does_not_exist() {
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
 
     expectedException.expect(NotFoundException.class);
     expectedException.expectMessage("User with login 'unknown-login' is not found");
@@ -175,47 +156,12 @@ public class AddUserToTemplateActionTest extends BasePermissionWsTest<AddUserToT
 
   @Test
   public void fail_if_template_key_does_not_exist() {
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
 
     expectedException.expect(NotFoundException.class);
     expectedException.expectMessage("Permission template with id 'unknown-key' is not found");
 
     newRequest(user.getLogin(), "unknown-key", CODEVIEWER);
-  }
-
-  @Test
-  public void fail_if_organization_does_not_exist() {
-    loginAsAdmin(db.getDefaultOrganization());
-
-    expectedException.expect(NotFoundException.class);
-    expectedException.expectMessage("No organization with key 'Unknown'");
-
-    newRequest()
-      .setParam(PARAM_USER_LOGIN, user.getLogin())
-      .setParam(PARAM_PERMISSION, CODEVIEWER)
-      .setParam(PARAM_TEMPLATE_NAME, permissionTemplate.getName().toUpperCase())
-      .setParam(PARAM_ORGANIZATION, "Unknown")
-      .execute();
-  }
-
-  @Test
-  public void fail_to_add_permission_when_user_is_not_member_of_given_organization() {
-    // User is not member of given organization
-    OrganizationDto otherOrganization = db.organizations().insert();
-    addUserAsMemberOfOrganization(otherOrganization);
-    OrganizationDto organization = db.organizations().insert(organizationDto -> organizationDto.setKey("Organization key"));
-    PermissionTemplateDto permissionTemplate = db.permissionTemplates().insertTemplate(organization);
-    loginAsAdmin(organization);
-
-    expectedException.expect(IllegalArgumentException.class);
-    expectedException.expectMessage("User 'user-login' is not member of organization 'Organization key'");
-
-    newRequest()
-      .setParam(PARAM_USER_LOGIN, user.getLogin())
-      .setParam(PARAM_PERMISSION, CODEVIEWER)
-      .setParam(PARAM_TEMPLATE_NAME, permissionTemplate.getName().toUpperCase())
-      .setParam(PARAM_ORGANIZATION, organization.getKey())
-      .execute();
   }
 
   private void newRequest(@Nullable String userLogin, @Nullable String templateKey, @Nullable String permission) {
@@ -224,7 +170,7 @@ public class AddUserToTemplateActionTest extends BasePermissionWsTest<AddUserToT
       request.setParam(PARAM_USER_LOGIN, userLogin);
     }
     if (templateKey != null) {
-      request.setParam(org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_TEMPLATE_ID, templateKey);
+      request.setParam(PARAM_TEMPLATE_ID, templateKey);
     }
     if (permission != null) {
       request.setParam(PARAM_PERMISSION, permission);
@@ -234,12 +180,9 @@ public class AddUserToTemplateActionTest extends BasePermissionWsTest<AddUserToT
   }
 
   private List<String> getLoginsInTemplateAndPermission(PermissionTemplateDto template, String permission) {
-    PermissionQuery permissionQuery = PermissionQuery.builder().setOrganizationUuid(template.getOrganizationUuid()).setPermission(permission).build();
+    PermissionQuery permissionQuery = PermissionQuery.builder().setPermission(permission).build();
     return db.getDbClient().permissionTemplateDao()
       .selectUserLoginsByQueryAndTemplate(db.getSession(), permissionQuery, template.getUuid());
   }
 
-  private void addUserAsMemberOfOrganization(OrganizationDto organization) {
-    db.organizations().addMember(organization, user);
-  }
 }

@@ -63,7 +63,7 @@ import static org.sonar.api.server.ws.WebService.Param.FACETS;
 import static org.sonar.api.server.ws.WebService.Param.FIELDS;
 import static org.sonar.api.server.ws.WebService.Param.PAGE;
 import static org.sonar.api.server.ws.WebService.Param.PAGE_SIZE;
-import static org.sonar.server.es.SearchOptions.MAX_LIMIT;
+import static org.sonar.server.es.SearchOptions.MAX_PAGE_SIZE;
 import static org.sonar.server.rule.index.RuleIndex.ALL_STATUSES_EXCEPT_REMOVED;
 import static org.sonar.server.rule.index.RuleIndex.FACET_ACTIVE_SEVERITIES;
 import static org.sonar.server.rule.index.RuleIndex.FACET_CWE;
@@ -129,7 +129,7 @@ public class SearchAction implements RulesWsAction {
   @Override
   public void define(WebService.NewController controller) {
     WebService.NewAction action = controller.createAction(ACTION)
-      .addPagingParams(100, MAX_LIMIT)
+      .addPagingParams(100, MAX_PAGE_SIZE)
       .setHandler(this)
       .setChangelog(new Change("7.1", "The field 'scope' has been added to the response"))
       .setChangelog(new Change("7.1", "The field 'scope' has been added to the 'f' parameter"))
@@ -227,7 +227,7 @@ public class SearchAction implements RulesWsAction {
       context.addFacets(request.getFacets());
     }
     if (pageSize < 1) {
-      context.setPage(Integer.parseInt(request.getP()), 0).setLimit(MAX_LIMIT);
+      context.setPage(Integer.parseInt(request.getP()), 0).setLimit(MAX_PAGE_SIZE);
     } else {
       context.setPage(Integer.parseInt(request.getP()), pageSize);
     }
@@ -236,7 +236,7 @@ public class SearchAction implements RulesWsAction {
 
   private SearchResult doSearch(DbSession dbSession, RuleQuery query, SearchOptions context) {
     SearchIdResult<String> result = ruleIndex.search(query, context);
-    List<RuleDto> rules = dbClient.ruleDao().selectByUuids(dbSession, query.getOrganization().getUuid(), result.getUuids());
+    List<RuleDto> rules = dbClient.ruleDao().selectByUuids(dbSession, result.getUuids());
     List<String> ruleUuids = rules.stream().map(RuleDto::getUuid).collect(Collectors.toList());
     List<String> templateRuleUuids = rules.stream()
       .map(RuleDto::getTemplateUuid)
@@ -255,7 +255,7 @@ public class SearchAction implements RulesWsAction {
   private void doContextResponse(DbSession dbSession, SearchRequest request, SearchResult result, SearchResponse.Builder response, RuleQuery query) {
     SearchOptions contextForResponse = loadCommonContext(request);
     writeRules(dbSession, response, result, contextForResponse);
-    if (contextForResponse.getFields().contains("actives") && ruleWsSupport.areActiveRulesVisible(query.getOrganization())) {
+    if (contextForResponse.getFields().contains("actives")) {
       activeRuleCompleter.completeSearch(dbSession, query, result.rules, response);
     }
   }

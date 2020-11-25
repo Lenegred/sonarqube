@@ -21,7 +21,7 @@ import * as React from 'react';
 import { translate } from 'sonar-ui-common/helpers/l10n';
 import ReadMore from './ReadMore';
 
-const link = 'https://redirect.sonarsource.com/doc/fix-the-leak.html';
+const link = '/documentation/user-guide/clean-as-you-code/';
 
 export default function AboutLeakPeriod() {
   return (

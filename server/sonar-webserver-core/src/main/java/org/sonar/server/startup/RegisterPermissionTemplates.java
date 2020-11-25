@@ -23,31 +23,35 @@ import java.util.Date;
 import java.util.Optional;
 import org.picocontainer.Startable;
 import org.sonar.api.security.DefaultGroups;
+import org.sonar.api.utils.System2;
 import org.sonar.api.utils.log.Logger;
 import org.sonar.api.utils.log.Loggers;
 import org.sonar.api.utils.log.Profiler;
 import org.sonar.api.web.UserRole;
+import org.sonar.core.util.UuidFactory;
 import org.sonar.db.DbClient;
 import org.sonar.db.DbSession;
-import org.sonar.db.organization.DefaultTemplates;
-import org.sonar.db.permission.OrganizationPermission;
+import org.sonar.db.permission.GlobalPermission;
 import org.sonar.db.permission.template.PermissionTemplateDto;
 import org.sonar.db.user.GroupDto;
-import org.sonar.server.organization.DefaultOrganizationProvider;
+import org.sonar.server.usergroups.DefaultGroupFinder;
 
-import static java.lang.String.format;
+import static org.sonar.server.property.InternalProperties.DEFAULT_PROJECT_TEMPLATE;
 
 public class RegisterPermissionTemplates implements Startable {
 
   private static final Logger LOG = Loggers.get(RegisterPermissionTemplates.class);
-  private static final String DEFAULT_TEMPLATE_UUID = "default_template";
 
   private final DbClient dbClient;
-  private final DefaultOrganizationProvider defaultOrganizationProvider;
+  private final UuidFactory uuidFactory;
+  private final System2 system2;
+  private final DefaultGroupFinder defaultGroupFinder;
 
-  public RegisterPermissionTemplates(DbClient dbClient, DefaultOrganizationProvider defaultOrganizationProvider) {
+  public RegisterPermissionTemplates(DbClient dbClient, UuidFactory uuidFactory, System2 system2, DefaultGroupFinder defaultGroupFinder) {
     this.dbClient = dbClient;
-    this.defaultOrganizationProvider = defaultOrganizationProvider;
+    this.uuidFactory = uuidFactory;
+    this.system2 = system2;
+    this.defaultGroupFinder = defaultGroupFinder;
   }
 
   @Override
@@ -55,11 +59,10 @@ public class RegisterPermissionTemplates implements Startable {
     Profiler profiler = Profiler.create(Loggers.get(getClass())).startInfo("Register permission templates");
 
     try (DbSession dbSession = dbClient.openSession(false)) {
-      String defaultOrganizationUuid = defaultOrganizationProvider.get().getUuid();
-      Optional<DefaultTemplates> defaultTemplates = dbClient.organizationDao().getDefaultTemplates(dbSession, defaultOrganizationUuid);
-      if (!defaultTemplates.isPresent()) {
-        PermissionTemplateDto defaultTemplate = getOrInsertDefaultTemplate(dbSession, defaultOrganizationUuid);
-        dbClient.organizationDao().setDefaultTemplates(dbSession, defaultOrganizationUuid, new DefaultTemplates().setProjectUuid(defaultTemplate.getUuid()));
+      Optional<String> defaultProjectTemplate = dbClient.internalPropertiesDao().selectByKey(dbSession, DEFAULT_PROJECT_TEMPLATE);
+      if (!defaultProjectTemplate.isPresent()) {
+        PermissionTemplateDto defaultTemplate = getOrInsertDefaultTemplate(dbSession);
+        dbClient.internalPropertiesDao().save(dbSession, DEFAULT_PROJECT_TEMPLATE, defaultTemplate.getUuid());
         dbSession.commit();
       }
     }
@@ -72,19 +75,13 @@ public class RegisterPermissionTemplates implements Startable {
     // nothing to do
   }
 
-  private PermissionTemplateDto getOrInsertDefaultTemplate(DbSession dbSession, String defaultOrganizationUuid) {
-    PermissionTemplateDto permissionTemplateDto = dbClient.permissionTemplateDao().selectByUuid(dbSession, DEFAULT_TEMPLATE_UUID);
-    if (permissionTemplateDto != null) {
-      return permissionTemplateDto;
-    }
-
+  private PermissionTemplateDto getOrInsertDefaultTemplate(DbSession dbSession) {
     PermissionTemplateDto template = new PermissionTemplateDto()
-      .setOrganizationUuid(defaultOrganizationUuid)
       .setName("Default template")
-      .setUuid(DEFAULT_TEMPLATE_UUID)
+      .setUuid(uuidFactory.create())
       .setDescription("This permission template will be used as default when no other permission configuration is available")
-      .setCreatedAt(new Date())
-      .setUpdatedAt(new Date());
+      .setCreatedAt(new Date(system2.now()))
+      .setUpdatedAt(new Date(system2.now()));
 
     dbClient.permissionTemplateDao().insert(dbSession, template);
     insertDefaultGroupPermissions(dbSession, template);
@@ -98,22 +95,18 @@ public class RegisterPermissionTemplates implements Startable {
   }
 
   private void insertPermissionForAdministrators(DbSession dbSession, PermissionTemplateDto template) {
-    Optional<GroupDto> admins = dbClient.groupDao().selectByName(dbSession, template.getOrganizationUuid(), DefaultGroups.ADMINISTRATORS);
+    Optional<GroupDto> admins = dbClient.groupDao().selectByName(dbSession, DefaultGroups.ADMINISTRATORS);
     if (admins.isPresent()) {
       insertGroupPermission(dbSession, template, UserRole.ADMIN, admins.get());
-      insertGroupPermission(dbSession, template, OrganizationPermission.APPLICATION_CREATOR.getKey(), admins.get());
-      insertGroupPermission(dbSession, template, OrganizationPermission.PORTFOLIO_CREATOR.getKey(), admins.get());
+      insertGroupPermission(dbSession, template, GlobalPermission.APPLICATION_CREATOR.getKey(), admins.get());
+      insertGroupPermission(dbSession, template, GlobalPermission.PORTFOLIO_CREATOR.getKey(), admins.get());
     } else {
       LOG.error("Cannot setup default permission for group: " + DefaultGroups.ADMINISTRATORS);
     }
   }
 
   private void insertPermissionsForDefaultGroup(DbSession dbSession, PermissionTemplateDto template) {
-    String organizationUuid = template.getOrganizationUuid();
-    String defaultGroupUuid = dbClient.organizationDao().getDefaultGroupUuid(dbSession, organizationUuid)
-      .orElseThrow(() -> new IllegalStateException(format("Default group for organization %s is not defined", organizationUuid)));
-    GroupDto defaultGroup = Optional.ofNullable(dbClient.groupDao().selectByUuid(dbSession, defaultGroupUuid))
-      .orElseThrow(() -> new IllegalStateException(format("Default group with id %s for organization %s doesn't exist", defaultGroupUuid, organizationUuid)));
+    GroupDto defaultGroup = defaultGroupFinder.findDefaultGroup(dbSession);
     insertGroupPermission(dbSession, template, UserRole.USER, defaultGroup);
     insertGroupPermission(dbSession, template, UserRole.CODEVIEWER, defaultGroup);
     insertGroupPermission(dbSession, template, UserRole.ISSUE_ADMIN, defaultGroup);

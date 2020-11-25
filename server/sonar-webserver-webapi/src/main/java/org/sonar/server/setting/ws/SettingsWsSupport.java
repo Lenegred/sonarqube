@@ -23,9 +23,8 @@ import java.util.Optional;
 import org.sonar.api.server.ServerSide;
 import org.sonar.api.web.UserRole;
 import org.sonar.db.component.ComponentDto;
-import org.sonar.db.permission.OrganizationPermission;
+import org.sonar.db.permission.GlobalPermission;
 import org.sonar.process.ProcessProperties;
-import org.sonar.server.organization.DefaultOrganizationProvider;
 import org.sonar.server.user.UserSession;
 
 import static java.lang.String.format;
@@ -36,11 +35,9 @@ import static org.sonar.api.web.UserRole.ADMIN;
 public class SettingsWsSupport {
   public static final String DOT_SECURED = ".secured";
 
-  private final DefaultOrganizationProvider defaultOrganizationProvider;
   private final UserSession userSession;
 
-  public SettingsWsSupport(DefaultOrganizationProvider defaultOrganizationProvider, UserSession userSession) {
-    this.defaultOrganizationProvider = defaultOrganizationProvider;
+  public SettingsWsSupport(UserSession userSession) {
     this.userSession = userSession;
   }
 
@@ -54,7 +51,7 @@ public class SettingsWsSupport {
   }
 
   boolean isVisible(String key, Optional<ComponentDto> component) {
-    return hasPermission(OrganizationPermission.SCAN, UserRole.SCAN, component) || verifySecuredSetting(key, component);
+    return hasPermission(GlobalPermission.SCAN, UserRole.SCAN, component) || verifySecuredSetting(key, component);
   }
 
   static boolean isSecured(String key) {
@@ -62,18 +59,18 @@ public class SettingsWsSupport {
   }
 
   private boolean verifySecuredSetting(String key, Optional<ComponentDto> component) {
-    return (!isSecured(key) || hasPermission(OrganizationPermission.ADMINISTER, ADMIN, component));
+    return (!isSecured(key) || hasPermission(GlobalPermission.ADMINISTER, ADMIN, component));
   }
 
-  private boolean hasPermission(OrganizationPermission orgPermission, String projectPermission, Optional<ComponentDto> component) {
+  private boolean hasPermission(GlobalPermission orgPermission, String projectPermission, Optional<ComponentDto> component) {
     if (userSession.isSystemAdministrator()) {
       return true;
     }
-    if (userSession.hasPermission(orgPermission, defaultOrganizationProvider.get().getUuid())) {
+    if (userSession.hasPermission(orgPermission)) {
       return true;
     }
     return component
-      .map(c -> userSession.hasPermission(orgPermission, c.getOrganizationUuid()) || userSession.hasComponentPermission(projectPermission, c))
+      .map(c -> userSession.hasPermission(orgPermission) || userSession.hasComponentPermission(projectPermission, c))
       .orElse(false);
   }
 

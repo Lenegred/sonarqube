@@ -26,19 +26,19 @@ import { Alert } from 'sonar-ui-common/components/ui/Alert';
 import { translate } from 'sonar-ui-common/helpers/l10n';
 import { isDefined } from 'sonar-ui-common/helpers/types';
 import { getMeasuresWithMetrics } from '../../../api/measures';
-import DocTooltip from '../../../components/docs/DocTooltip';
 import { getBranchLikeQuery } from '../../../helpers/branch-like';
 import { enhanceConditionWithMeasure, enhanceMeasuresWithMetrics } from '../../../helpers/measures';
 import { fetchBranchStatus } from '../../../store/rootActions';
 import { getBranchStatusByBranchLike, Store } from '../../../store/rootReducer';
 import { BranchLike, PullRequest } from '../../../types/branch-like';
+import { IssueType } from '../../../types/issues';
 import { QualityGateStatusCondition } from '../../../types/quality-gates';
 import IssueLabel from '../components/IssueLabel';
 import IssueRating from '../components/IssueRating';
 import MeasurementLabel from '../components/MeasurementLabel';
 import QualityGateConditions from '../components/QualityGateConditions';
 import '../styles.css';
-import { IssueType, MeasurementType, PR_METRICS } from '../utils';
+import { MeasurementType, PR_METRICS } from '../utils';
 import AfterMergeEstimate from './AfterMergeEstimate';
 import LargeQualityGateBadge from './LargeQualityGateBadge';
 
@@ -185,13 +185,15 @@ export class PullRequestOverview extends React.PureComponent<Props, State> {
           )}
           <div className="display-flex-row">
             <div className="big-spacer-right">
-              <h2 className="overview-panel-title spacer-bottom small">
+              <h2 className="overview-panel-title spacer-bottom small display-inline-flex-center">
                 {translate('overview.quality_gate')}
-                <DocTooltip
-                  className="spacer-left"
-                  doc={import(
-                    /* webpackMode: "eager" */ 'Docs/tooltips/quality-gates/project-homepage-quality-gate.md'
-                  )}
+                <HelpTooltip
+                  className="little-spacer-left"
+                  overlay={
+                    <div className="big-padded-top big-padded-bottom">
+                      {translate('overview.quality_gate.help')}
+                    </div>
+                  }
                 />
               </h2>
               <LargeQualityGateBadge component={component} level={status} />

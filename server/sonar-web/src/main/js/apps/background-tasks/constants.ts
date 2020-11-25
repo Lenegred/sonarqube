@@ -21,18 +21,8 @@ import { Query } from './utils';
 
 export const STATUSES = {
   ALL: '__ALL__',
-  ALL_EXCEPT_PENDING: '__ALL_EXCEPT_PENDING__',
-  PENDING: 'PENDING',
-  IN_PROGRESS: 'IN_PROGRESS',
-  SUCCESS: 'SUCCESS',
-  FAILED: 'FAILED',
-  CANCELED: 'CANCELED'
+  ALL_EXCEPT_PENDING: '__ALL_EXCEPT_PENDING__'
 };
-
-export enum BackgroundTaskTypes {
-  Report = 'REPORT',
-  IssueSync = 'ISSUE_SYNC'
-}
 
 export const ALL_TYPES = 'ALL_TYPES';
 

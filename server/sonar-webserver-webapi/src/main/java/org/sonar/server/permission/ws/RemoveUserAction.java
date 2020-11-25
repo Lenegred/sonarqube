@@ -25,21 +25,18 @@ import org.sonar.api.server.ws.Response;
 import org.sonar.api.server.ws.WebService;
 import org.sonar.db.DbClient;
 import org.sonar.db.DbSession;
-import org.sonar.db.organization.OrganizationDto;
+import org.sonar.db.component.ComponentDto;
 import org.sonar.server.permission.PermissionChange;
 import org.sonar.server.permission.PermissionService;
 import org.sonar.server.permission.PermissionUpdater;
-import org.sonar.server.permission.ProjectUuid;
 import org.sonar.server.permission.UserId;
 import org.sonar.server.permission.UserPermissionChange;
 import org.sonar.server.user.UserSession;
 
 import static java.util.Collections.singletonList;
 import static org.sonar.server.permission.PermissionPrivilegeChecker.checkProjectAdmin;
-import static org.sonar.server.permission.ws.WsParameters.createOrganizationParameter;
 import static org.sonar.server.permission.ws.WsParameters.createProjectParameters;
 import static org.sonar.server.permission.ws.WsParameters.createUserLoginParameter;
-import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_ORGANIZATION;
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_PERMISSION;
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_USER_LOGIN;
 
@@ -78,24 +75,19 @@ public class RemoveUserAction implements PermissionsWsAction {
       .setPost(true)
       .setHandler(this);
 
-    wsParameters.createPermissionParameter(action);
+    wsParameters.createPermissionParameter(action, "The permission you would like to revoke from the user.");
     createUserLoginParameter(action);
     createProjectParameters(action);
-    createOrganizationParameter(action).setSince("6.2");
   }
 
   @Override
   public void handle(Request request, Response response) throws Exception {
     try (DbSession dbSession = dbClient.openSession(false)) {
       UserId user = wsSupport.findUser(dbSession, request.mandatoryParam(PARAM_USER_LOGIN));
-      Optional<ProjectUuid> project = wsSupport.findProjectUuid(dbSession, request);
-      OrganizationDto org = wsSupport.findOrganization(dbSession, request.param(PARAM_ORGANIZATION));
-
-      checkProjectAdmin(userSession, org.getUuid(), project);
-
+      Optional<ComponentDto> project = wsSupport.findProject(dbSession, request);
+      checkProjectAdmin(userSession, project.orElse(null));
       PermissionChange change = new UserPermissionChange(
         PermissionChange.Operation.REMOVE,
-        org.getUuid(),
         request.mandatoryParam(PARAM_PERMISSION),
         project.orElse(null),
         user, permissionService);

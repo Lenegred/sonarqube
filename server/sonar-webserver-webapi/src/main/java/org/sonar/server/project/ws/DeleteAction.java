@@ -25,7 +25,7 @@ import org.sonar.api.server.ws.WebService;
 import org.sonar.api.web.UserRole;
 import org.sonar.db.DbClient;
 import org.sonar.db.DbSession;
-import org.sonar.db.permission.OrganizationPermission;
+import org.sonar.db.permission.GlobalPermission;
 import org.sonar.db.project.ProjectDto;
 import org.sonar.server.component.ComponentCleanerService;
 import org.sonar.server.component.ComponentFinder;
@@ -68,6 +68,7 @@ public class DeleteAction implements ProjectsWsAction {
     action
       .createParam(PARAM_PROJECT)
       .setDescription("Project key")
+      .setRequired(true)
       .setExampleValue(KEY_PROJECT_EXAMPLE_001);
   }
 
@@ -89,7 +90,7 @@ public class DeleteAction implements ProjectsWsAction {
 
   private void checkPermission(ProjectDto project) {
     if (!userSession.hasProjectPermission(UserRole.ADMIN, project)) {
-      userSession.checkPermission(OrganizationPermission.ADMINISTER, project.getOrganizationUuid());
+      userSession.checkPermission(GlobalPermission.ADMINISTER);
     }
   }
 }

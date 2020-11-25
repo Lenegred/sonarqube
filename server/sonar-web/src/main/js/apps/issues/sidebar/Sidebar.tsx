@@ -18,6 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 import * as React from 'react';
+import { connect } from 'react-redux';
+import { getGlobalSettingValue, Store } from '../../../store/rootReducer';
+import { BranchLike } from '../../../types/branch-like';
+import { ComponentQualifier } from '../../../types/component';
 import { Facet, Query, ReferencedComponent, ReferencedLanguage, ReferencedRule } from '../utils';
 import AssigneeFacet from './AssigneeFacet';
 import AuthorFacet from './AuthorFacet';
@@ -28,6 +32,7 @@ import LanguageFacet from './LanguageFacet';
 import ProjectFacet from './ProjectFacet';
 import ResolutionFacet from './ResolutionFacet';
 import RuleFacet from './RuleFacet';
+import ScopeFacet from './ScopeFacet';
 import SeverityFacet from './SeverityFacet';
 import StandardFacet from './StandardFacet';
 import StatusFacet from './StatusFacet';
@@ -35,6 +40,7 @@ import TagFacet from './TagFacet';
 import TypeFacet from './TypeFacet';
 
 export interface Props {
+  branchLike?: BranchLike;
   component: T.Component | undefined;
   facets: T.Dict<Facet | undefined>;
   hideAuthorFacet?: boolean;
@@ -51,11 +57,12 @@ export interface Props {
   referencedLanguages: T.Dict<ReferencedLanguage>;
   referencedRules: T.Dict<ReferencedRule>;
   referencedUsers: T.Dict<T.UserBase>;
+  disableDeveloperAggregatedInfo: boolean;
 }
 
-export default class Sidebar extends React.PureComponent<Props> {
+export class Sidebar extends React.PureComponent<Props> {
   renderComponentFacets() {
-    const { component, facets, loadingFacets, openFacets, query } = this.props;
+    const { component, facets, loadingFacets, openFacets, query, branchLike } = this.props;
     if (!component) {
       return null;
     }
@@ -68,8 +75,9 @@ export default class Sidebar extends React.PureComponent<Props> {
     };
     return (
       <>
-        {component.qualifier !== 'DIR' && (
+        {component.qualifier !== ComponentQualifier.Directory && (
           <DirectoryFacet
+            branchLike={branchLike}
             directories={query.directories}
             fetching={loadingFacets.directories === true}
             open={!!openFacets.directories}
@@ -78,10 +86,10 @@ export default class Sidebar extends React.PureComponent<Props> {
           />
         )}
         <FileFacet
+          branchLike={branchLike}
           fetching={loadingFacets.files === true}
-          fileUuids={query.files}
+          files={query.files}
           open={!!openFacets.files}
-          referencedComponents={this.props.referencedComponentsById}
           stats={facets.files}
           {...commonProps}
         />
@@ -117,6 +125,14 @@ export default class Sidebar extends React.PureComponent<Props> {
           open={!!openFacets.severities}
           severities={query.severities}
           stats={facets.severities}
+        />
+        <ScopeFacet
+          fetching={this.props.loadingFacets.scopes === true}
+          onChange={this.props.onFilterChange}
+          onToggle={this.props.onFacetToggle}
+          open={!!openFacets.scopes}
+          stats={facets.scopes}
+          scopes={query.scopes}
         />
         <ResolutionFacet
           fetching={this.props.loadingFacets.resolutions === true}
@@ -223,7 +239,7 @@ export default class Sidebar extends React.PureComponent<Props> {
           />
         )}
         {this.renderComponentFacets()}
-        {!this.props.myIssues && (
+        {!this.props.myIssues && !this.props.disableDeveloperAggregatedInfo && (
           <AssigneeFacet
             assigned={query.assigned}
             assignees={query.assignees}
@@ -232,13 +248,12 @@ export default class Sidebar extends React.PureComponent<Props> {
             onChange={this.props.onFilterChange}
             onToggle={this.props.onFacetToggle}
             open={!!openFacets.assignees}
-            organization={organizationKey}
             query={query}
             referencedUsers={this.props.referencedUsers}
             stats={facets.assignees}
           />
         )}
-        {displayAuthorFacet && (
+        {displayAuthorFacet && !this.props.disableDeveloperAggregatedInfo && (
           <AuthorFacet
             authors={query.authors}
             component={component}
@@ -256,3 +271,15 @@ export default class Sidebar extends React.PureComponent<Props> {
     );
   }
 }
+
+export const mapStateToProps = (state: Store) => {
+  const disableDeveloperAggregatedInfo = getGlobalSettingValue(
+    state,
+    'sonar.developerAggregatedInfo.disabled'
+  );
+  return {
+    disableDeveloperAggregatedInfo: disableDeveloperAggregatedInfo?.value === true.toString()
+  };
+};
+
+export default connect(mapStateToProps)(Sidebar);

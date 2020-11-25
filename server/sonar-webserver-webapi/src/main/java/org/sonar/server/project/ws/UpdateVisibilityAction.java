@@ -152,13 +152,12 @@ public class UpdateVisibilityAction implements ProjectsWsAction {
   }
 
   private void insertProjectPermissionOnUser(DbSession dbSession, ComponentDto component, String permission, String userUuid) {
-    dbClient.userPermissionDao().insert(dbSession, new UserPermissionDto(Uuids.create(), component.getOrganizationUuid(), permission, userUuid, component.uuid()));
+    dbClient.userPermissionDao().insert(dbSession, new UserPermissionDto(Uuids.create(), permission, userUuid, component.uuid()));
   }
 
   private void insertProjectPermissionOnGroup(DbSession dbSession, ComponentDto component, String permission, String groupUuid) {
     dbClient.groupPermissionDao().insert(dbSession, new GroupPermissionDto()
       .setUuid(uuidFactory.create())
-      .setOrganizationUuid(component.getOrganizationUuid())
       .setComponentUuid(component.uuid())
       .setGroupUuid(groupUuid)
       .setRole(permission));

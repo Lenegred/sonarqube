@@ -20,11 +20,11 @@
 import * as React from 'react';
 import { Button } from 'sonar-ui-common/components/controls/buttons';
 import ConfirmButton from 'sonar-ui-common/components/controls/ConfirmButton';
+import HelpTooltip from 'sonar-ui-common/components/controls/HelpTooltip';
 import DeferredSpinner from 'sonar-ui-common/components/ui/DeferredSpinner';
 import { translate, translateWithParameters } from 'sonar-ui-common/helpers/l10n';
 import { Profile } from '../../../api/quality-profiles';
 import { deleteRule, getRuleDetails, updateRule } from '../../../api/rules';
-import DocTooltip from '../../../components/docs/DocTooltip';
 import { Activation, Query } from '../query';
 import CustomRuleButton from './CustomRuleButton';
 import RuleDetailsCustomRules from './RuleDetailsCustomRules';
@@ -42,7 +42,6 @@ interface Props {
   onDeactivate: (profile: string, rule: string) => void;
   onDelete: (rule: string) => void;
   onFilterChange: (changes: Partial<Query>) => void;
-  organization: string | undefined;
   referencedProfiles: T.Dict<Profile>;
   referencedRepositories: T.Dict<{ key: string; language: string; name: string }>;
   ruleKey: string;
@@ -79,8 +78,7 @@ export default class RuleDetails extends React.PureComponent<Props, State> {
   fetchRuleDetails = () => {
     return getRuleDetails({
       actives: true,
-      key: this.props.ruleKey,
-      organization: this.props.organization
+      key: this.props.ruleKey
     }).then(
       ({ actives, rule }) => {
         if (this.mounted) {
@@ -109,7 +107,6 @@ export default class RuleDetails extends React.PureComponent<Props, State> {
     );
     updateRule({
       key: this.props.ruleKey,
-      organization: this.props.organization,
       tags: tags.join()
     }).catch(() => {
       if (this.mounted) {
@@ -146,7 +143,7 @@ export default class RuleDetails extends React.PureComponent<Props, State> {
   };
 
   handleDelete = () => {
-    return deleteRule({ key: this.props.ruleKey, organization: this.props.organization }).then(() =>
+    return deleteRule({ key: this.props.ruleKey }).then(() =>
       this.props.onDelete(this.props.ruleKey)
     );
   };
@@ -158,13 +155,7 @@ export default class RuleDetails extends React.PureComponent<Props, State> {
       return <div className="coding-rule-details" />;
     }
 
-    const {
-      allowCustomRules,
-      canWrite,
-      hideQualityProfiles,
-      organization,
-      referencedProfiles
-    } = this.props;
+    const { allowCustomRules, canWrite, hideQualityProfiles, referencedProfiles } = this.props;
     const { params = [] } = ruleDetails;
 
     const isCustom = !!ruleDetails.templateKey;
@@ -177,7 +168,6 @@ export default class RuleDetails extends React.PureComponent<Props, State> {
             canWrite={canWrite}
             onFilterChange={this.props.onFilterChange}
             onTagsChange={this.handleTagsChange}
-            organization={organization}
             referencedRepositories={this.props.referencedRepositories}
             ruleDetails={ruleDetails}
           />
@@ -185,7 +175,6 @@ export default class RuleDetails extends React.PureComponent<Props, State> {
           <RuleDetailsDescription
             canWrite={canWrite}
             onChange={this.handleRuleChange}
-            organization={organization}
             ruleDetails={ruleDetails}
           />
 
@@ -198,7 +187,6 @@ export default class RuleDetails extends React.PureComponent<Props, State> {
               <CustomRuleButton
                 customRule={ruleDetails}
                 onDone={this.handleRuleChange}
-                organization={organization}
                 templateRule={ruleDetails}>
                 {({ onClick }) => (
                   <Button
@@ -226,11 +214,13 @@ export default class RuleDetails extends React.PureComponent<Props, State> {
                       onClick={onClick}>
                       {translate('delete')}
                     </Button>
-                    <DocTooltip
+                    <HelpTooltip
                       className="spacer-left"
-                      doc={import(
-                        /* webpackMode: "eager" */ 'Docs/tooltips/rules/custom-rule-removal.md'
-                      )}
+                      overlay={
+                        <div className="big-padded-top big-padded-bottom">
+                          {translate('coding_rules.custom_rule.removal')}
+                        </div>
+                      }
                     />
                   </>
                 )}
@@ -241,7 +231,6 @@ export default class RuleDetails extends React.PureComponent<Props, State> {
           {ruleDetails.isTemplate && (
             <RuleDetailsCustomRules
               canChange={allowCustomRules && canWrite}
-              organization={organization}
               ruleDetails={ruleDetails}
             />
           )}
@@ -252,14 +241,13 @@ export default class RuleDetails extends React.PureComponent<Props, State> {
               canWrite={canWrite}
               onActivate={this.handleActivate}
               onDeactivate={this.handleDeactivate}
-              organization={organization}
               referencedProfiles={referencedProfiles}
               ruleDetails={ruleDetails}
             />
           )}
 
           {!ruleDetails.isTemplate && ruleDetails.type !== 'SECURITY_HOTSPOT' && (
-            <RuleDetailsIssues organization={organization} ruleDetails={ruleDetails} />
+            <RuleDetailsIssues ruleDetails={ruleDetails} />
           )}
         </DeferredSpinner>
       </div>

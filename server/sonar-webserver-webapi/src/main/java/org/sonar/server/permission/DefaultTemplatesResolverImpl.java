@@ -22,32 +22,50 @@ package org.sonar.server.permission;
 import org.sonar.api.resources.Qualifiers;
 import org.sonar.api.resources.ResourceType;
 import org.sonar.api.resources.ResourceTypes;
-import org.sonar.db.organization.DefaultTemplates;
-
-import static java.util.Optional.ofNullable;
+import org.sonar.db.DbClient;
+import org.sonar.db.DbSession;
+import org.sonar.server.property.InternalProperties;
 
 public class DefaultTemplatesResolverImpl implements DefaultTemplatesResolver {
+
+  private final DbClient dbClient;
   private final ResourceTypes resourceTypes;
 
-  public DefaultTemplatesResolverImpl(ResourceTypes resourceTypes) {
+  public DefaultTemplatesResolverImpl(DbClient dbClient, ResourceTypes resourceTypes) {
+    this.dbClient = dbClient;
     this.resourceTypes = resourceTypes;
   }
 
   @Override
-  public ResolvedDefaultTemplates resolve(DefaultTemplates defaultTemplates) {
-    String projectDefaultTemplate = defaultTemplates.getProjectUuid();
+  public ResolvedDefaultTemplates resolve(DbSession dbSession) {
+    String defaultProjectTemplate = dbClient.internalPropertiesDao().selectByKey(dbSession, InternalProperties.DEFAULT_PROJECT_TEMPLATE).orElseThrow(() -> {
+      throw new IllegalStateException("Default template for project is missing");
+    });
 
-    return new ResolvedDefaultTemplates(
-      projectDefaultTemplate,
-      isViewsEnabled(resourceTypes) ? ofNullable(defaultTemplates.getApplicationsUuid()).orElse(projectDefaultTemplate) : null,
-      isViewsEnabled(resourceTypes) ? ofNullable(defaultTemplates.getPortfoliosUuid()).orElse(projectDefaultTemplate) : null);
+    String defaultPortfolioTemplate = null;
+    String defaultApplicationTemplate = null;
+
+    if (isPortfolioEnabled(resourceTypes)) {
+      defaultPortfolioTemplate = dbClient.internalPropertiesDao().selectByKey(dbSession, InternalProperties.DEFAULT_PORTFOLIO_TEMPLATE).orElse(defaultProjectTemplate);
+    }
+    if (isApplicationEnabled(resourceTypes)) {
+      defaultApplicationTemplate = dbClient.internalPropertiesDao().selectByKey(dbSession, InternalProperties.DEFAULT_APPLICATION_TEMPLATE).orElse(defaultProjectTemplate);
+    }
+    return new ResolvedDefaultTemplates(defaultProjectTemplate, defaultApplicationTemplate, defaultPortfolioTemplate);
   }
 
-  private static boolean isViewsEnabled(ResourceTypes resourceTypes) {
+  private static boolean isPortfolioEnabled(ResourceTypes resourceTypes) {
     return resourceTypes.getRoots()
       .stream()
       .map(ResourceType::getQualifier)
-      .anyMatch(Qualifiers.VIEW::equals);
+      .anyMatch(qualifier -> Qualifiers.VIEW.equals(qualifier));
+  }
+
+  private static boolean isApplicationEnabled(ResourceTypes resourceTypes) {
+    return resourceTypes.getRoots()
+            .stream()
+            .map(ResourceType::getQualifier)
+            .anyMatch(qualifier ->  Qualifiers.APP.equals(qualifier));
   }
 
 }

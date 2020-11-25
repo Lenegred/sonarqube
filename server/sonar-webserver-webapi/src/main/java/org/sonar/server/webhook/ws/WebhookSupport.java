@@ -30,7 +30,7 @@ import org.sonar.server.user.UserSession;
 
 import static java.lang.String.format;
 import static org.sonar.api.web.UserRole.ADMIN;
-import static org.sonar.db.permission.OrganizationPermission.ADMINISTER;
+import static org.sonar.db.permission.GlobalPermission.ADMINISTER;
 import static org.sonar.process.ProcessProperties.Property.SONAR_VALIDATE_WEBHOOKS;
 
 public class WebhookSupport {
@@ -47,8 +47,8 @@ public class WebhookSupport {
     userSession.checkProjectPermission(ADMIN, projectDto);
   }
 
-  void checkPermission(OrganizationDto organizationDto) {
-    userSession.checkPermission(ADMINISTER, organizationDto);
+  void checkPermission() {
+    userSession.checkPermission(ADMINISTER);
   }
 
   void checkUrlPattern(String url, String message, Object... messageArguments) {

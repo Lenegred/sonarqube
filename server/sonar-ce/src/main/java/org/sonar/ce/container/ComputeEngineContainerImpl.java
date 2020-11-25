@@ -77,7 +77,7 @@ import org.sonar.core.platform.EditionProvider;
 import org.sonar.core.platform.Module;
 import org.sonar.core.platform.PlatformEditionProvider;
 import org.sonar.core.platform.PluginClassloaderFactory;
-import org.sonar.core.platform.PluginLoader;
+import org.sonar.core.platform.PluginClassLoader;
 import org.sonar.core.util.UuidFactoryImpl;
 import org.sonar.db.DBSessionsImpl;
 import org.sonar.db.DaoModule;
@@ -111,6 +111,7 @@ import org.sonar.server.log.ServerLogging;
 import org.sonar.server.measure.index.ProjectMeasuresIndexer;
 import org.sonar.server.metric.CoreCustomMetrics;
 import org.sonar.server.metric.DefaultMetricFinder;
+import org.sonar.server.metric.UnanalyzedLanguageMetrics;
 import org.sonar.server.notification.DefaultNotificationManager;
 import org.sonar.server.notification.NotificationService;
 import org.sonar.server.notification.email.EmailNotificationChannel;
@@ -335,7 +336,7 @@ public class ComputeEngineContainerImpl implements ComputeEngineContainer {
       // plugins
       PluginClassloaderFactory.class,
       CePluginJarExploder.class,
-      PluginLoader.class,
+      PluginClassLoader.class,
       CePluginRepository.class,
       InstalledPluginReferentialFactory.class,
       ComputeEngineExtensionInstaller.class,
@@ -386,6 +387,7 @@ public class ComputeEngineContainerImpl implements ComputeEngineContainer {
       // measure
       CoreCustomMetrics.class,
       DefaultMetricFinder.class,
+      UnanalyzedLanguageMetrics.class,
 
       UserIndexer.class,
       UserIndex.class,

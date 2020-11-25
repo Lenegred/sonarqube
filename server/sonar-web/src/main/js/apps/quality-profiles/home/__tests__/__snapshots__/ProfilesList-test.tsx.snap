@@ -15,7 +15,6 @@ exports[`should render correctly 1`] = `
         },
       ]
     }
-    organization="foo"
   />
   <div
     className="boxed-group boxed-group-inner quality-profiles-table"
@@ -36,9 +35,15 @@ exports[`should render correctly 1`] = `
             className="text-right nowrap"
           >
             quality_profiles.list.projects
-            <DocTooltip
+            <HelpTooltip
               className="table-cell-doc"
-              doc={Promise {}}
+              overlay={
+                <div
+                  className="big-padded-top big-padded-bottom"
+                >
+                  quality_profiles.list.projects.help
+                </div>
+              }
             />
           </th>
           <th
@@ -106,9 +111,15 @@ exports[`should render correctly 1`] = `
             className="text-right nowrap"
           >
             quality_profiles.list.projects
-            <DocTooltip
+            <HelpTooltip
               className="table-cell-doc"
-              doc={Promise {}}
+              overlay={
+                <div
+                  className="big-padded-top big-padded-bottom"
+                >
+                  quality_profiles.list.projects.help
+                </div>
+              }
             />
           </th>
           <th
@@ -176,7 +187,6 @@ exports[`should render correctly 2`] = `
         },
       ]
     }
-    organization="foo"
   />
   <div
     className="boxed-group boxed-group-inner quality-profiles-table"
@@ -197,9 +207,15 @@ exports[`should render correctly 2`] = `
             className="text-right nowrap"
           >
             quality_profiles.list.projects
-            <DocTooltip
+            <HelpTooltip
               className="table-cell-doc"
-              doc={Promise {}}
+              overlay={
+                <div
+                  className="big-padded-top big-padded-bottom"
+                >
+                  quality_profiles.list.projects.help
+                </div>
+              }
             />
           </th>
           <th
@@ -267,7 +283,6 @@ exports[`should render correctly 3`] = `
         },
       ]
     }
-    organization="foo"
   />
   <Alert
     className="spacer-top"

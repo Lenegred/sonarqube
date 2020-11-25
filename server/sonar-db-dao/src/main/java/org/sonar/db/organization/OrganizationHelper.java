@@ -23,11 +23,11 @@ import java.util.List;
 import java.util.stream.Collectors;
 import org.sonar.db.DbClient;
 import org.sonar.db.DbSession;
-import org.sonar.db.permission.OrganizationPermission;
+import org.sonar.db.permission.GlobalPermission;
 
 public class OrganizationHelper {
 
-  private static final String ADMIN_PERMISSION = OrganizationPermission.ADMINISTER.getKey();
+  private static final String ADMIN_PERMISSION = GlobalPermission.ADMINISTER.getKey();
 
   private final DbClient dbClient;
 
@@ -37,11 +37,11 @@ public class OrganizationHelper {
 
   public List<OrganizationDto> selectOrganizationsWithLastAdmin(DbSession dbSession, String userUuid) {
     return dbClient.organizationDao().selectByPermission(dbSession, userUuid, ADMIN_PERMISSION).stream()
-      .filter(org -> isLastAdmin(dbSession, org, userUuid))
+      .filter(org -> isLastAdmin(dbSession, userUuid))
       .collect(Collectors.toList());
   }
 
-  private boolean isLastAdmin(DbSession dbSession, OrganizationDto org, String userUuid) {
-    return dbClient.authorizationDao().countUsersWithGlobalPermissionExcludingUser(dbSession, org.getUuid(), ADMIN_PERMISSION, userUuid) == 0;
+  private boolean isLastAdmin(DbSession dbSession, String userUuid) {
+    return dbClient.authorizationDao().countUsersWithGlobalPermissionExcludingUser(dbSession, ADMIN_PERMISSION, userUuid) == 0;
   }
 }

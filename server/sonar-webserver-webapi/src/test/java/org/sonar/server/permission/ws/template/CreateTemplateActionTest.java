@@ -21,8 +21,8 @@ package org.sonar.server.permission.ws.template;
 
 import javax.annotation.Nullable;
 import org.junit.Test;
-import org.sonar.api.utils.System2;
 import org.sonar.api.impl.utils.TestSystem2;
+import org.sonar.api.utils.System2;
 import org.sonar.db.permission.template.PermissionTemplateDto;
 import org.sonar.server.exceptions.BadRequestException;
 import org.sonar.server.exceptions.ForbiddenException;
@@ -31,7 +31,7 @@ import org.sonar.server.ws.TestRequest;
 import org.sonar.server.ws.TestResponse;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.sonar.db.permission.OrganizationPermission.ADMINISTER_QUALITY_PROFILES;
+import static org.sonar.db.permission.GlobalPermission.ADMINISTER_QUALITY_PROFILES;
 import static org.sonar.test.JsonAssert.assertJson;
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_DESCRIPTION;
 import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_NAME;
@@ -40,16 +40,16 @@ import static org.sonarqube.ws.client.permission.PermissionsWsParameters.PARAM_P
 public class CreateTemplateActionTest extends BasePermissionWsTest<CreateTemplateAction> {
 
   private static final long NOW = 1_440_512_328_743L;
-  private System2 system = new TestSystem2().setNow(NOW);
+  private final System2 system = new TestSystem2().setNow(NOW);
 
   @Override
   protected CreateTemplateAction buildWsAction() {
-    return new CreateTemplateAction(db.getDbClient(), userSession, system, newPermissionWsSupport());
+    return new CreateTemplateAction(db.getDbClient(), userSession, system);
   }
 
   @Test
   public void create_full_permission_template() {
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
 
     TestResponse result = newRequest("Finance", "Permissions for financially related projects", ".*\\.finance\\..*");
 
@@ -67,7 +67,7 @@ public class CreateTemplateActionTest extends BasePermissionWsTest<CreateTemplat
 
   @Test
   public void create_minimalist_permission_template() {
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
 
     newRequest("Finance", null, null);
 
@@ -82,7 +82,7 @@ public class CreateTemplateActionTest extends BasePermissionWsTest<CreateTemplat
 
   @Test
   public void fail_if_name_not_provided() {
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
 
     expectedException.expect(IllegalArgumentException.class);
 
@@ -91,7 +91,7 @@ public class CreateTemplateActionTest extends BasePermissionWsTest<CreateTemplat
 
   @Test
   public void fail_if_name_empty() {
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
 
     expectedException.expect(IllegalArgumentException.class);
     expectedException.expectMessage("The 'name' parameter is missing");
@@ -101,7 +101,7 @@ public class CreateTemplateActionTest extends BasePermissionWsTest<CreateTemplat
 
   @Test
   public void fail_if_regexp_if_not_valid() {
-    loginAsAdmin(db.getDefaultOrganization());
+    loginAsAdmin();
 
     expectedException.expect(BadRequestException.class);
     expectedException.expectMessage("The 'projectKeyPattern' parameter must be a valid Java regular expression. '[azerty' was passed");
@@ -111,8 +111,8 @@ public class CreateTemplateActionTest extends BasePermissionWsTest<CreateTemplat
 
   @Test
   public void fail_if_name_already_exists_in_database_case_insensitive() {
-    loginAsAdmin(db.getDefaultOrganization());
-    PermissionTemplateDto template = db.permissionTemplates().insertTemplate(db.getDefaultOrganization());
+    loginAsAdmin();
+    PermissionTemplateDto template = db.permissionTemplates().insertTemplate();
 
     expectedException.expect(BadRequestException.class);
     expectedException.expectMessage("A template with the name '" + template.getName() + "' already exists (case insensitive).");
@@ -122,7 +122,7 @@ public class CreateTemplateActionTest extends BasePermissionWsTest<CreateTemplat
 
   @Test
   public void fail_if_not_admin() {
-    userSession.logIn().addPermission(ADMINISTER_QUALITY_PROFILES, db.getDefaultOrganization());
+    userSession.logIn().addPermission(ADMINISTER_QUALITY_PROFILES);
 
     expectedException.expect(ForbiddenException.class);
 
